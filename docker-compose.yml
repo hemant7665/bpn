@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  localstack:
+    # LocalStack Pro required for RDS support.
+    # On Windows/Docker Desktop the daemon socket is exposed as a named pipe;
+    # we mount BOTH so LocalStack can spawn the postgres child container.
+    image: localstack/localstack-pro:latest
+    container_name: localstack_project
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - LOCALSTACK_AUTH_TOKEN=ls-hOzohEdE-teYI-zIGa-1909-1737TiDAc2c3
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      # Docker socket — lets LocalStack spawn postgres as a sibling container
+      - "//var/run/docker.sock:/var/run/docker.sock"
+      - "localstack_data:/var/lib/localstack"
+    networks:
+      - bpn-network
+
+networks:
+  bpn-network:
+    name: bpn-network
+    external: false
+
+volumes:
+  localstack_data:
+    name: localstack_data
