@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
-	"log"
 	"net/http"
 	"os"
 
 	"project-serverless/apps/subgraph-user/orchestrator"
+	"project-serverless/internal/logger"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -91,10 +91,12 @@ func main() {
 	corsHandler = gqlServer
 
 	if os.Getenv("ENVIRONMENT") == "local" {
-		log.Println("Starting GraphQL playground on http://localhost:4003/")
+		logger.Info("starting_graphql_playground", map[string]any{"url": "http://localhost:4003/"})
 		http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 		http.Handle("/query", corsHandler)
-		log.Fatal(http.ListenAndServe(":4003", nil))
+		if err := http.ListenAndServe(":4003", nil); err != nil {
+			panic(err)
+		}
 	} else {
 		// Start the Lambda handler when running in AWS
 		lambda.Start(handleRequest)

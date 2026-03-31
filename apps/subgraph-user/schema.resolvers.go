@@ -22,7 +22,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, name string, email st
 		ID:        strconv.Itoa(domainUser.ID),
 		Name:      domainUser.Name,
 		Email:     domainUser.Email,
-		CreatedAt: time.Now().Format(time.RFC3339),
+		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
 	}, nil
 }
 
@@ -37,7 +37,7 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, name strin
 		ID:        strconv.Itoa(domainUser.ID),
 		Name:      domainUser.Name,
 		Email:     domainUser.Email,
-		CreatedAt: time.Now().Format(time.RFC3339),
+		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
 	}, nil
 }
 
@@ -52,7 +52,7 @@ func (r *mutationResolver) DeleteUser(ctx context.Context, id string) (*User, er
 		ID:        strconv.Itoa(domainUser.ID),
 		Name:      domainUser.Name,
 		Email:     domainUser.Email,
-		CreatedAt: time.Now().Format(time.RFC3339),
+		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
 	}, nil
 }
 
@@ -67,8 +67,28 @@ func (r *queryResolver) GetUser(ctx context.Context, id string) (*User, error) {
 		ID:        strconv.Itoa(domainUser.ID),
 		Name:      domainUser.Name,
 		Email:     domainUser.Email,
-		CreatedAt: time.Now().Format(time.RFC3339),
+		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+// ListUsers is the resolver for the listUsers field.
+func (r *queryResolver) ListUsers(ctx context.Context) ([]*User, error) {
+	domainUsers, err := r.Orchestrator.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]*User, 0, len(domainUsers))
+	for _, domainUser := range domainUsers {
+		u := domainUser
+		users = append(users, &User{
+			ID:        strconv.Itoa(u.ID),
+			Name:      u.Name,
+			Email:     u.Email,
+			CreatedAt: u.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return users, nil
 }
 
 // Mutation returns MutationResolver implementation.

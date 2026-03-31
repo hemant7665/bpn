@@ -2,10 +2,12 @@ package db
 
 import (
 	"errors"
-	"fmt"
-	"log"
+	"net/url"
 	"os"
 	"sync"
+
+	"project-serverless/internal/apperrors"
+	"project-serverless/internal/logger"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -39,10 +41,11 @@ func Connect() (*gorm.DB, error) {
 			return
 		}
 
-		log.Printf("Connecting to database: %s", dsn)
+		host, dbname := maskDSNForLog(dsn)
+		logger.Info("connecting_to_database", map[string]any{"host": host, "db": dbname})
 		dbInstance, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
-			err = fmt.Errorf("%w: %w", ErrDatabaseURLInvalid, err)
+			err = apperrors.NewInternal(ErrDatabaseURLInvalid.Error(), err)
 			return
 		}
 
@@ -72,7 +75,7 @@ func ConnectWithDialector(dialector gorm.Dialector, config *gorm.Config) (*gorm.
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, apperrors.NewInternal("failed to connect to database", err)
 	}
 
 	return dbInstance, nil
@@ -93,4 +96,25 @@ func GetDB() *gorm.DB {
 // SetDB overrides the db instance, used in tests.
 func SetDB(db *gorm.DB) {
 	testDB = db
+}
+
+func maskDSNForLog(dsn string) (host string, dbname string) {
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		return "unknown", "unknown"
+	}
+
+	host = parsed.Hostname()
+	dbname = parsed.Path
+	if len(dbname) > 0 && dbname[0] == '/' {
+		dbname = dbname[1:]
+	}
+
+	if host == "" {
+		host = "unknown"
+	}
+	if dbname == "" {
+		dbname = "unknown"
+	}
+	return host, dbname
 }

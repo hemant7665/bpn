@@ -2,23 +2,24 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"runtime/debug"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/joho/godotenv"
 
+	"project-serverless/internal/apperrors"
+	"project-serverless/internal/bootstrap"
 	"project-serverless/internal/db"
 	"project-serverless/internal/domain"
 	"project-serverless/internal/events"
+	"project-serverless/internal/logger"
 	"project-serverless/internal/repository"
+	"project-serverless/internal/validator"
 )
 
 type UpdateUserRequest struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID    int    `json:"id" validate:"required,gt=0"`
+	Name  string `json:"name" validate:"required"`
+	Email string `json:"email" validate:"required,email"`
 }
 
 type dependencies struct {
@@ -28,46 +29,41 @@ type dependencies struct {
 var deps dependencies
 
 func setupDependencies() error {
-	_ = godotenv.Load()
-
-	if _, err := db.Connect(); err != nil {
-		return fmt.Errorf("database connection failed: %w", err)
+	repo, err := bootstrap.SetupUserRepository()
+	if err != nil {
+		return apperrors.NewInternal("database connection failed", err)
 	}
-
-	deps.repo = repository.NewUserRepository(db.GetDB())
+	deps.repo = repo
 	return nil
 }
 
 func HandleRequest(ctx context.Context, req UpdateUserRequest) (*domain.User, error) {
-	log.Printf("UpdateUser called: ID=%d Name=%s Email=%s", req.ID, req.Name, req.Email)
-
-	if req.ID <= 0 {
-		return nil, fmt.Errorf("id is required and must be > 0")
-	}
-	if req.Name == "" || req.Email == "" {
-		return nil, fmt.Errorf("name and email are required")
+	if err := validator.ValidateStruct(req); err != nil {
+		return nil, apperrors.NewValidation("id>0, name, and valid email are required")
 	}
 
 	// Verify user exists in write model (source of truth)
 	var existing domain.User
 	if err := db.GetDB().WithContext(ctx).Where("id = ?", req.ID).First(&existing).Error; err != nil {
-		return nil, fmt.Errorf("user %d not found: %w", req.ID, err)
+		return nil, apperrors.NewNotFound("user not found")
 	}
 
 	user := &domain.User{
 		ID:    req.ID,
 		Name:  req.Name,
 		Email: req.Email,
+		CreatedAt: existing.CreatedAt,
 	}
 
 	if err := deps.repo.UpdateUser(ctx, user); err != nil {
-		return nil, fmt.Errorf("failed to update user %d: %w", req.ID, err)
+		return nil, apperrors.NewInternal("failed to update user", err)
 	}
+	logger.Info("user_updated", map[string]any{"user_id": req.ID})
 
-	log.Printf("Successfully updated user %d", req.ID)
-
-	// Emit event to dedicated update queue → triggers userSyncWorker
-	events.EmitEvent(ctx, events.UpdateQueue, "update", req.ID)
+	// Publish domain and audit events to Kinesis
+	if err := events.EmitUserEvents(ctx, "update", *user); err != nil {
+		return nil, apperrors.NewInternal("user updated but event dispatch failed", err)
+	}
 
 	return user, nil
 }
@@ -75,12 +71,13 @@ func HandleRequest(ctx context.Context, req UpdateUserRequest) (*domain.User, er
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("UNHANDLED PANIC: %v\nStack: %s", r, debug.Stack())
+			logger.Error("unhandled_panic", map[string]any{"panic": r, "stack": string(debug.Stack())})
 		}
 	}()
 
 	if err := setupDependencies(); err != nil {
-		log.Fatalf("Failed to initialize Lambda dependencies: %v", err)
+		logger.Error("failed_to_initialize_lambda_dependencies", map[string]any{"error": err.Error()})
+		panic(err)
 	}
 
 	lambda.Start(HandleRequest)

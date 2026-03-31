@@ -9,7 +9,7 @@ $DBPWD  = "POSTGRES"
 $DBPORT = "4510"
 $DBNAME = "lamdapractice"
 $CTR    = "localstack_project"
-$MFILE  = "internal\scripts\migrations\001_user.sql"
+$MIGRATION_DIR = "scripts\migrate"
 
 function Step([string]$t) {
     Write-Host ""
@@ -54,18 +54,18 @@ Write-Host "Waiting 3s for database catalog to update..." -ForegroundColor Yello
 Start-Sleep -Seconds 3
 Write-Host "Database step done." -ForegroundColor Green
 
-# ── 6. Run migrations ──────────────────────────────────────────
-Step "6. Running migration ($MFILE)..."
-if (-not (Test-Path $MFILE)) {
-    Write-Host "ERROR: Migration file not found: $MFILE" -ForegroundColor Red
+# ── 6. Run migrations (golang-migrate) ─────────────────────────
+Step "6. Running migrations from '$MIGRATION_DIR'..."
+if (-not (Test-Path $MIGRATION_DIR)) {
+    Write-Host "ERROR: Migration directory not found: $MIGRATION_DIR" -ForegroundColor Red
     exit 1
 }
-docker cp $MFILE "${CTR}:/tmp/migration.sql"
-if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: docker cp failed" -ForegroundColor Red; exit 1 }
 $DBDSN = "postgres://${DBUSR}:${DBPWD}@localhost:${DBPORT}/${DBNAME}?sslmode=disable"
-docker exec $CTR bash -c "psql '$DBDSN' -f /tmp/migration.sql"
+$env:DATABASE_URL = $DBDSN
+$env:MIGRATION_DIR = $MIGRATION_DIR
+go run ./cmd/runMigrations
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: Migration failed" -ForegroundColor Red; exit 1 }
-Write-Host "Migration applied." -ForegroundColor Green
+Write-Host "Migrations applied." -ForegroundColor Green
 
 # ── 7. Verify ─────────────────────────────────────────────────
 Step "7. Verifying tables..."

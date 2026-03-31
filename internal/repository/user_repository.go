@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"project-serverless/internal/domain"
 )
@@ -20,9 +21,9 @@ type UserRepository interface {
 	GetUser(ctx context.Context, id int) (*domain.UserSummary, error)
 	ListUsers(ctx context.Context) ([]domain.UserSummary, error)
 
-	// RefreshView triggers REFRESH MATERIALIZED VIEW CONCURRENTLY
-	// Called by the sync worker after every CDC event.
-	RefreshView(ctx context.Context) error
+	// Read model maintenance ops for event-driven projection updates.
+	UpsertUserSummary(ctx context.Context, summary *domain.UserSummary) error
+	DeleteUserSummary(ctx context.Context, id int) error
 }
 
 type userRepositoryImpl struct {
@@ -67,10 +68,17 @@ func (r *userRepositoryImpl) ListUsers(ctx context.Context) ([]domain.UserSummar
 	return summaries, nil
 }
 
-// --- Materialized view refresh ---
+// --- Read model projection maintenance ---
 
-func (r *userRepositoryImpl) RefreshView(ctx context.Context) error {
-	// CONCURRENTLY avoids locking so reads are never blocked
+func (r *userRepositoryImpl) UpsertUserSummary(ctx context.Context, summary *domain.UserSummary) error {
 	return r.db.WithContext(ctx).
-		Exec("REFRESH MATERIALIZED VIEW CONCURRENTLY read_model.users_summary").Error
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "email", "created_at"}),
+		}).
+		Create(summary).Error
+}
+
+func (r *userRepositoryImpl) DeleteUserSummary(ctx context.Context, id int) error {
+	return r.db.WithContext(ctx).Delete(&domain.UserSummary{}, id).Error
 }

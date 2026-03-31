@@ -2,21 +2,22 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"runtime/debug"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/joho/godotenv"
 
+	"project-serverless/internal/apperrors"
+	"project-serverless/internal/bootstrap"
 	"project-serverless/internal/db"
 	"project-serverless/internal/domain"
 	"project-serverless/internal/events"
+	"project-serverless/internal/logger"
 	"project-serverless/internal/repository"
+	"project-serverless/internal/validator"
 )
 
 type DeleteUserRequest struct {
-	ID int `json:"id"`
+	ID int `json:"id" validate:"required,gt=0"`
 }
 
 type dependencies struct {
@@ -26,38 +27,35 @@ type dependencies struct {
 var deps dependencies
 
 func setupDependencies() error {
-	_ = godotenv.Load()
-
-	if _, err := db.Connect(); err != nil {
-		return fmt.Errorf("database connection failed: %w", err)
+	repo, err := bootstrap.SetupUserRepository()
+	if err != nil {
+		return apperrors.NewInternal("database connection failed", err)
 	}
-
-	deps.repo = repository.NewUserRepository(db.GetDB())
+	deps.repo = repo
 	return nil
 }
 
 func HandleRequest(ctx context.Context, req DeleteUserRequest) (*domain.User, error) {
-	log.Printf("DeleteUser called: ID=%d", req.ID)
-
-	if req.ID <= 0 {
-		return nil, fmt.Errorf("id is required and must be > 0")
+	if err := validator.ValidateStruct(req); err != nil {
+		return nil, apperrors.NewValidation("id must be greater than 0")
 	}
 
 	// Fetch from write model (source of truth — always consistent)
 	var existing domain.User
 	if err := db.GetDB().WithContext(ctx).Where("id = ?", req.ID).First(&existing).Error; err != nil {
-		return nil, fmt.Errorf("user %d not found: %w", req.ID, err)
+		return nil, apperrors.NewNotFound("user not found")
 	}
 
 	// Delete from write model
 	if err := deps.repo.DeleteUser(ctx, req.ID); err != nil {
-		return nil, fmt.Errorf("failed to delete user %d: %w", req.ID, err)
+		return nil, apperrors.NewInternal("failed to delete user", err)
 	}
+	logger.Info("user_deleted", map[string]any{"user_id": req.ID})
 
-	log.Printf("Successfully deleted user %d", req.ID)
-
-	// Emit event to dedicated delete queue → triggers userSyncWorker
-	events.EmitEvent(ctx, events.DeleteQueue, "delete", req.ID)
+	// Publish domain and audit events to Kinesis
+	if err := events.EmitUserEvents(ctx, "delete", existing); err != nil {
+		return nil, apperrors.NewInternal("user deleted but event dispatch failed", err)
+	}
 
 	return &existing, nil
 }
@@ -65,12 +63,13 @@ func HandleRequest(ctx context.Context, req DeleteUserRequest) (*domain.User, er
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("UNHANDLED PANIC: %v\nStack: %s", r, debug.Stack())
+			logger.Error("unhandled_panic", map[string]any{"panic": r, "stack": string(debug.Stack())})
 		}
 	}()
 
 	if err := setupDependencies(); err != nil {
-		log.Fatalf("Failed to initialize Lambda dependencies: %v", err)
+		logger.Error("failed_to_initialize_lambda_dependencies", map[string]any{"error": err.Error()})
+		panic(err)
 	}
 
 	lambda.Start(HandleRequest)

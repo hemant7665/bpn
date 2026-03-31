@@ -2,6 +2,7 @@ scalar AWSDateTime
 
 type Query {
   getUser(id: ID!): User
+  listUsers: [User!]!
 }
 
 type Mutation {

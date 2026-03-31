@@ -3,20 +3,21 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"log"
 	"os"
-	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 
+	"project-serverless/internal/apperrors"
 	"project-serverless/internal/domain"
+	"project-serverless/internal/logger"
+	"project-serverless/internal/validator"
 )
 
 type Service interface {
-	GetUser(ctx context.Context, id string) (*domain.User, error)
+	GetUser(ctx context.Context, id string) (*domain.UserSummary, error)
+	ListUsers(ctx context.Context) ([]domain.UserSummary, error)
 	CreateUser(ctx context.Context, name string, email string) (*domain.User, error)
 	DeleteUser(ctx context.Context, id string) (*domain.User, error)
 	UpdateUser(ctx context.Context, id string, name string, email string) (*domain.User, error)
@@ -34,14 +35,14 @@ func NewService() (Service, error) {
 	environment := os.Getenv("ENVIRONMENT")
 
 	if environment == "local" {
-		log.Println("Initializing admin orchestrator for LocalStack environment")
+		logger.Info("initializing_orchestrator", map[string]any{"environment": "local"})
 		awsEndpoint := os.Getenv("AWS_LAMBDA_ENDPOINT")
 		if awsEndpoint == "" {
 			awsEndpoint = os.Getenv("AWS_ENDPOINT_URL")
 		}
 
 		if awsEndpoint == "" {
-			return nil, errors.New("AWS_ENDPOINT_URL or AWS_LAMBDA_ENDPOINT must be set in local environment")
+			return nil, apperrors.NewValidation("AWS_ENDPOINT_URL or AWS_LAMBDA_ENDPOINT must be set in local environment")
 		}
 
 		cfg, err = config.LoadDefaultConfig(ctx,
@@ -52,16 +53,16 @@ func NewService() (Service, error) {
 			)),
 		)
 	} else {
-		log.Println("Initializing admin orchestrator for AWS environment: " + environment)
+		logger.Info("initializing_orchestrator", map[string]any{"environment": environment})
 		cfg, err = config.LoadDefaultConfig(ctx)
 	}
 
 	if err != nil {
-		log.Println("Failed to load AWS config for environment: " + environment + ", error: " + err.Error())
-		return nil, errors.New("service unavailable")
+		logger.Error("failed_to_load_aws_config", map[string]any{"environment": environment, "error": err.Error()})
+		return nil, apperrors.NewInternal("service unavailable", err)
 	}
 
-	log.Println("Admin orchestrator initialized successfully")
+	logger.Info("orchestrator_initialized", map[string]any{"environment": environment})
 	return NewServiceWithClient(lambda.NewFromConfig(cfg)), nil
 }
 
@@ -74,7 +75,7 @@ func NewServiceWithClient(client LambdaInvoker) Service {
 func (s *serviceImpl) invokeLambda(ctx context.Context, functionName string, payload interface{}) ([]byte, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return nil, apperrors.NewInternal("failed to marshal lambda payload", err)
 	}
 
 	input := &lambda.InvokeInput{
@@ -84,26 +85,23 @@ func (s *serviceImpl) invokeLambda(ctx context.Context, functionName string, pay
 
 	result, err := s.lambdaClient.Invoke(ctx, input)
 	if err != nil {
-		return nil, err
+		return nil, apperrors.NewInternal("failed to invoke lambda", err)
 	}
 
 	if result.FunctionError != nil {
-		return nil, errors.New("lambda function error: " + *result.FunctionError)
+		return nil, apperrors.NewInternal("lambda function error: "+*result.FunctionError, nil)
 	}
 
 	return result.Payload, nil
 }
 
-func (s *serviceImpl) GetUser(ctx context.Context, id string) (*domain.User, error) {
-	idInt, err := strconv.Atoi(id)
+func (s *serviceImpl) GetUser(ctx context.Context, id string) (*domain.UserSummary, error) {
+	idInt, err := validator.ParsePositiveIntID(id)
 	if err != nil {
-		return nil, errors.New("invalid user id: must be an integer")
+		return nil, err
 	}
 
-	lambdaName := os.Getenv("LAMBDA_NAME")
-	if lambdaName == "" {
-		lambdaName = "getUser"
-	}
+	lambdaName := getLambdaName("LAMBDA_GET_USER_NAME", "getUser")
 
 	payload := map[string]interface{}{
 		"id": idInt,
@@ -111,27 +109,43 @@ func (s *serviceImpl) GetUser(ctx context.Context, id string) (*domain.User, err
 
 	responseBody, err := s.invokeLambda(ctx, lambdaName, payload)
 	if err != nil {
-		log.Println("GetUser lambda invocation failed")
+		logger.Error("get_user_lambda_invocation_failed", map[string]any{"error": err.Error()})
 		return nil, err
 	}
 
-	var user domain.User
+	var user domain.UserSummary
 	err = json.Unmarshal(responseBody, &user)
 	if err != nil {
-		log.Println("Failed to unmarshal GetUser lambda response")
-		return nil, err
+		logger.Error("get_user_response_unmarshal_failed", map[string]any{"error": err.Error()})
+		return nil, apperrors.NewInternal("invalid getUser lambda response", err)
 	}
 
 	return &user, nil
 
 }
 
+func (s *serviceImpl) ListUsers(ctx context.Context) ([]domain.UserSummary, error) {
+	lambdaName := getLambdaName("LAMBDA_LIST_USERS_NAME", "listUsers")
+
+	responseBody, err := s.invokeLambda(ctx, lambdaName, map[string]interface{}{})
+	if err != nil {
+		logger.Error("list_users_lambda_invocation_failed", map[string]any{"error": err.Error()})
+		return nil, err
+	}
+
+	var users []domain.UserSummary
+	err = json.Unmarshal(responseBody, &users)
+	if err != nil {
+		logger.Error("list_users_response_unmarshal_failed", map[string]any{"error": err.Error()})
+		return nil, apperrors.NewInternal("invalid listUsers lambda response", err)
+	}
+
+	return users, nil
+}
+
 func (s *serviceImpl) CreateUser(ctx context.Context, name string, email string) (*domain.User, error) {
 
-	lambdaName := os.Getenv("LAMBDA_NAME")
-	if lambdaName == "" {
-		lambdaName = "createUser"
-	}
+	lambdaName := getLambdaName("LAMBDA_CREATE_USER_NAME", "createUser")
 
 	payload := map[string]interface{}{
 		"name":  name,
@@ -140,30 +154,27 @@ func (s *serviceImpl) CreateUser(ctx context.Context, name string, email string)
 
 	responseBody, err := s.invokeLambda(ctx, lambdaName, payload)
 	if err != nil {
-		log.Println("CreateUser lambda invocation failed")
+		logger.Error("create_user_lambda_invocation_failed", map[string]any{"error": err.Error()})
 		return nil, err
 	}
 
 	var user domain.User
 	err = json.Unmarshal(responseBody, &user)
 	if err != nil {
-		log.Println("Failed to unmarshal CreateUser lambda response")
-		return nil, err
+		logger.Error("create_user_response_unmarshal_failed", map[string]any{"error": err.Error()})
+		return nil, apperrors.NewInternal("invalid createUser lambda response", err)
 	}
 
 	return &user, nil
 }
 
 func (s *serviceImpl) DeleteUser(ctx context.Context, id string) (*domain.User, error) {
-	idInt, err := strconv.Atoi(id)
+	idInt, err := validator.ParsePositiveIntID(id)
 	if err != nil {
-		return nil, errors.New("invalid user id: must be an integer")
+		return nil, err
 	}
 
-	lambdaName := os.Getenv("LAMBDA_NAME")
-	if lambdaName == "" {
-		lambdaName = "deleteUser"
-	}
+	lambdaName := getLambdaName("LAMBDA_DELETE_USER_NAME", "deleteUser")
 
 	payload := map[string]interface{}{
 		"id": idInt,
@@ -171,15 +182,15 @@ func (s *serviceImpl) DeleteUser(ctx context.Context, id string) (*domain.User, 
 
 	responseBody, err := s.invokeLambda(ctx, lambdaName, payload)
 	if err != nil {
-		log.Println("DeleteUser lambda invocation failed")
+		logger.Error("delete_user_lambda_invocation_failed", map[string]any{"error": err.Error()})
 		return nil, err
 	}
 
 	var user domain.User
 	err = json.Unmarshal(responseBody, &user)
 	if err != nil {
-		log.Println("Failed to unmarshal DeleteUser lambda response")
-		return nil, err
+		logger.Error("delete_user_response_unmarshal_failed", map[string]any{"error": err.Error()})
+		return nil, apperrors.NewInternal("invalid deleteUser lambda response", err)
 	}
 
 	return &user, nil
@@ -187,15 +198,12 @@ func (s *serviceImpl) DeleteUser(ctx context.Context, id string) (*domain.User, 
 }
 
 func (s *serviceImpl) UpdateUser(ctx context.Context, id string, name string, email string) (*domain.User, error) {
-	idInt, err := strconv.Atoi(id)
+	idInt, err := validator.ParsePositiveIntID(id)
 	if err != nil {
-		return nil, errors.New("invalid user id: must be an integer")
+		return nil, err
 	}
 
-	lambdaName := os.Getenv("LAMBDA_NAME")
-	if lambdaName == "" {
-		lambdaName = "updateUser"
-	}
+	lambdaName := getLambdaName("LAMBDA_UPDATE_USER_NAME", "updateUser")
 
 	payload := map[string]interface{}{
 		"id":    idInt,
@@ -205,17 +213,24 @@ func (s *serviceImpl) UpdateUser(ctx context.Context, id string, name string, em
 
 	responseBody, err := s.invokeLambda(ctx, lambdaName, payload)
 	if err != nil {
-		log.Println("UpdateUser lambda invocation failed")
+		logger.Error("update_user_lambda_invocation_failed", map[string]any{"error": err.Error()})
 		return nil, err
 	}
 
 	var user domain.User
 	err = json.Unmarshal(responseBody, &user)
 	if err != nil {
-		log.Println("Failed to unmarshal UpdateUser lambda response")
-		return nil, err
+		logger.Error("update_user_response_unmarshal_failed", map[string]any{"error": err.Error()})
+		return nil, apperrors.NewInternal("invalid updateUser lambda response", err)
 	}
 
 	return &user, nil
 
+}
+
+func getLambdaName(envVar string, fallback string) string {
+	if value := os.Getenv(envVar); value != "" {
+		return value
+	}
+	return fallback
 }

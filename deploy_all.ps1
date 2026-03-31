@@ -28,7 +28,8 @@ $functions = @(
     @{ name = "updateUser";           path = "./cmd/updateUser"  },
     @{ name = "deleteUser";           path = "./cmd/deleteUser"  },
     @{ name = "getUser";              path = "./query/getUser"   },
-    @{ name = "userSyncWorker";       path = "./worker/user"     }
+    @{ name = "listUsers";            path = "./query/listUsers" },
+    @{ name = "userSyncWorker";       path = "./workers/userSyncWorker" }
 )
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -63,18 +64,20 @@ if ($roles -notmatch "lambda-role") {
     Write-Host "IAM role already exists." -ForegroundColor Yellow
 }
 
-# ── SQS Configuration ──────────────────────────────────────────
-Write-Host "===> Ensuring SQS queues exist..."
+# ── Kinesis Configuration ──────────────────────────────────────
+Write-Host "===> Ensuring Kinesis streams exist..."
+$DOMAIN_STREAM = "user-domain-events"
+$AUDIT_STREAM  = "user-audit-events"
 
-$QUEUES = @("user-create-queue", "user-update-queue", "user-delete-queue")
-foreach ($q in $QUEUES) {
-    docker exec $CONTAINER_NAME awslocal sqs create-queue --queue-name $q | Out-Null
-    Write-Host "  Queue ready: $q"
+foreach ($stream in @($DOMAIN_STREAM, $AUDIT_STREAM)) {
+    $exists = docker exec $CONTAINER_NAME bash -c "awslocal kinesis describe-stream --stream-name $stream >/dev/null 2>&1 && echo yes || echo no"
+    if ($exists -notmatch "yes") {
+        docker exec $CONTAINER_NAME awslocal kinesis create-stream --stream-name $stream --shard-count 1 | Out-Null
+        Write-Host "  Stream created: $stream" -ForegroundColor Green
+    } else {
+        Write-Host "  Stream exists: $stream" -ForegroundColor Yellow
+    }
 }
-
-# Base URL for internal Lambda-to-SQS communication
-$SQS_BASE_URL = "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000"
-$SQS_QUEUE_URL  = "$SQS_BASE_URL/user-create-queue"  # Used by createUser
 
 # ── Deploy each function ──────────────────────────────────────
 Write-Host ""
@@ -114,7 +117,7 @@ foreach ($f in $functions) {
     docker exec $CONTAINER_NAME awslocal s3 cp "/tmp/$($f.name).zip" "s3://$S3_BUCKET/$($f.name).zip" | Out-Null
     
     # D. Lambda environment variables
-    $envVars = "Variables={DATABASE_URL=$DATABASE_URL,SQS_QUEUE_URL=$SQS_QUEUE_URL,AWS_ENDPOINT_URL=$LAMBDA_AWS_ENDPOINT,AWS_REGION=us-east-1,AWS_ACCESS_KEY_ID=test,AWS_SECRET_ACCESS_KEY=test}"
+    $envVars = "Variables={DATABASE_URL=$DATABASE_URL,KINESIS_DOMAIN_STREAM_NAME=$DOMAIN_STREAM,KINESIS_AUDIT_STREAM_NAME=$AUDIT_STREAM,AWS_ENDPOINT_URL=$LAMBDA_AWS_ENDPOINT,AWS_REGION=us-east-1,AWS_ACCESS_KEY_ID=test,AWS_SECRET_ACCESS_KEY=test}"
 
     # E. Create or update the Lambda function
     # Use a robust bash-level check to see if the function exists
@@ -147,23 +150,22 @@ foreach ($f in $functions) {
             --environment $envVars | Out-Null
     }
 
-    # F. Add Event Source Mappings for all 3 queues → userSyncWorker
+    # F. Add Event Source Mapping: domain stream -> userSyncWorker
     if ($f.name -eq "userSyncWorker") {
-        Write-Host "  Mapping SQS triggers for userSyncWorker..."
+        Write-Host "  Mapping Kinesis trigger for userSyncWorker..."
         $mappings = docker exec $CONTAINER_NAME awslocal lambda list-event-source-mappings `
             --function-name userSyncWorker --output text 2>&1
 
-        foreach ($q in $QUEUES) {
-            $qARN = "arn:aws:sqs:us-east-1:000000000000:$q"
-            if ($mappings -match $q) {
-                Write-Host "    $q already mapped."
-            } else {
-                docker exec $CONTAINER_NAME awslocal lambda create-event-source-mapping `
-                    --function-name userSyncWorker `
-                    --event-source-arn $qARN `
-                    --batch-size 10 | Out-Null
-                Write-Host "    $q mapped!" -ForegroundColor Green
-            }
+        $domainArn = "arn:aws:kinesis:us-east-1:000000000000:stream/$DOMAIN_STREAM"
+        if ($mappings -match $DOMAIN_STREAM) {
+            Write-Host "    $DOMAIN_STREAM already mapped."
+        } else {
+            docker exec $CONTAINER_NAME awslocal lambda create-event-source-mapping `
+                --function-name userSyncWorker `
+                --event-source-arn $domainArn `
+                --starting-position LATEST `
+                --batch-size 100 | Out-Null
+            Write-Host "    $DOMAIN_STREAM mapped!" -ForegroundColor Green
         }
     }
 

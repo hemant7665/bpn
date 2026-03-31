@@ -11,7 +11,7 @@ services:
       - "4566:4566"
       - "4510-4559:4510-4559"
     environment:
-      - LOCALSTACK_AUTH_TOKEN=ls-hOzohEdE-teYI-zIGa-1909-1737TiDAc2c3
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
       - DEBUG=1
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:

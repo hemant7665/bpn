@@ -2,17 +2,17 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"os"
 	"runtime/debug"
-	"strconv"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/joho/godotenv"
 
-	"project-serverless/internal/db"
+	"project-serverless/internal/apperrors"
+	"project-serverless/internal/bootstrap"
+	"project-serverless/internal/domain"
+	"project-serverless/internal/logger"
 	"project-serverless/internal/repository"
+	"project-serverless/internal/validator"
 )
 
 type Dependencies struct {
@@ -21,65 +21,42 @@ type Dependencies struct {
 
 var deps Dependencies
 
+type GetUserRequest struct {
+	ID interface{} `json:"id"`
+}
+
 func setupDependencies() error {
-	if _, err := db.Connect(); err != nil {
-		return fmt.Errorf("DATABASE_CONNECT_ERROR: %w", err)
+	repo, err := bootstrap.SetupUserRepository()
+	if err != nil {
+		return apperrors.NewInternal("database connection failed", err)
 	}
-	deps.repo = repository.NewUserRepository(db.GetDB())
+	deps.repo = repo
 	return nil
 }
 
-type GetUserRequest struct {
-	ID interface{} `json:"id"` // accepts both string ("7") and int (7)
-}
-
-func parseID(raw interface{}) (int, error) {
-	switch v := raw.(type) {
-	case float64: // JSON numbers unmarshal as float64
-		return int(v), nil
-	case string:
-		return strconv.Atoi(v)
-	default:
-		return 0, fmt.Errorf("unsupported id type: %T", raw)
-	}
-}
-
-func HandleRequest(ctx context.Context, req GetUserRequest) (interface{}, error) {
-	log.Printf("GetUser called with ID: %v", req.ID)
-
-	if req.ID == nil {
-		return nil, fmt.Errorf("ID is required")
-	}
-
-	idInt, err := parseID(req.ID)
+func HandleRequest(ctx context.Context, req GetUserRequest) (*domain.UserSummary, error) {
+	idInt, err := validator.ParsePositiveIntID(req.ID)
 	if err != nil {
-		return nil, fmt.Errorf("INVALID_ID_FORMAT: %v (must be a number)", req.ID)
+		return nil, err
 	}
-
 	user, err := deps.repo.GetUser(ctx, idInt)
 	if err != nil {
-		log.Printf("DB_QUERY_FAILURE: %v", err)
-		return nil, fmt.Errorf("USER_NOT_FOUND: %w", err)
+		return nil, apperrors.NewNotFound("user not found")
 	}
-
 	return user, nil
 }
 
 func main() {
-	log.Printf("BOOTING getUser Lambda (LOCALSTACK_HOSTNAME=%s)", os.Getenv("LOCALSTACK_HOSTNAME"))
-
+	logger.Info("booting_get_user_lambda", map[string]any{"localstack_hostname": os.Getenv("LOCALSTACK_HOSTNAME")})
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "EARLY_BOOT_PANIC: %v\nStack: %s", r, debug.Stack())
+			logger.Error("unhandled_panic", map[string]any{"panic": r, "stack": string(debug.Stack())})
 		}
 	}()
 
-	// Load .env — safe to call even if file is absent (Lambda env vars take over)
-	_ = godotenv.Load()
-
 	if err := setupDependencies(); err != nil {
-		log.Fatalf("Failed to initialize Lambda dependencies: %v", err)
+		logger.Error("failed_to_initialize_lambda_dependencies", map[string]any{"error": err.Error()})
+		panic(err)
 	}
-
 	lambda.Start(HandleRequest)
 }

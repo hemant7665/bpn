@@ -2,26 +2,30 @@ package events
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"encoding/json"
 	"os"
+	"strconv"
+	"time"
+
+	"project-serverless/internal/apperrors"
+	"project-serverless/internal/domain"
+	"project-serverless/internal/logger"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 )
 
-// Queue names — each write operation has its own dedicated queue
+// Stream names
 const (
-	CreateQueue = "user-create-queue"
-	UpdateQueue = "user-update-queue"
-	DeleteQueue = "user-delete-queue"
+	DomainStream = "user-domain-events"
+	AuditStream  = "user-audit-events"
 )
 
 func getAWSEndpoint() string {
 	lsHostname := os.Getenv("LOCALSTACK_HOSTNAME")
 	if lsHostname != "" {
-		return fmt.Sprintf("http://%s:4566", lsHostname)
+		return "http://" + lsHostname + ":4566"
 	}
 	awsEndpoint := os.Getenv("AWS_ENDPOINT_URL")
 	if awsEndpoint != "" {
@@ -30,17 +34,15 @@ func getAWSEndpoint() string {
 	return "http://localstack_project:4566"
 }
 
-// EmitEvent publishes a sync trigger message to the specified queue.
-func EmitEvent(ctx context.Context, queueName string, operation string, userID int) {
+func EmitUserEvents(ctx context.Context, operation string, user domain.User) error {
 	awsEndpoint := getAWSEndpoint()
-
-	// Allow per-queue override via env var, fallback to constructed URL
-	queueURL := os.Getenv("SQS_" + operation + "_QUEUE_URL")
-	if queueURL == "" {
-		queueURL = fmt.Sprintf(
-			"http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/%s",
-			queueName,
-		)
+	domainStream := os.Getenv("KINESIS_DOMAIN_STREAM_NAME")
+	if domainStream == "" {
+		domainStream = DomainStream
+	}
+	auditStream := os.Getenv("KINESIS_AUDIT_STREAM_NAME")
+	if auditStream == "" {
+		auditStream = AuditStream
 	}
 
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
@@ -55,20 +57,66 @@ func EmitEvent(ctx context.Context, queueName string, operation string, userID i
 		config.WithEndpointResolverWithOptions(customResolver),
 	)
 	if err != nil {
-		log.Printf("EVENT_EMIT_FAILURE: failed to load AWS config: %v", err)
-		return
+		logger.Error("event_emit_failure", map[string]any{"stage": "load_aws_config", "error": err.Error()})
+		return apperrors.NewInternal("event emit failed: load aws config", err)
 	}
 
-	client := sqs.NewFromConfig(cfg)
-	body := fmt.Sprintf(`{"operation":"%s","user_id":%d}`, operation, userID)
+	client := kinesis.NewFromConfig(cfg)
+	partitionKey := strconv.Itoa(user.ID)
 
-	_, err = client.SendMessage(ctx, &sqs.SendMessageInput{
-		QueueUrl:    &queueURL,
-		MessageBody: aws.String(body),
+	domainPayload, err := json.Marshal(UserEventPayload{
+		EventType: "domain",
+		Entity:    "user",
+		Operation: operation,
+		User: UserSnapshot{
+			ID:        user.ID,
+			Name:      user.Name,
+			Email:     user.Email,
+			CreatedAt: user.CreatedAt,
+		},
+		Timestamp: time.Now().UTC(),
 	})
 	if err != nil {
-		log.Printf("EVENT_EMIT_FAILURE [%s]: %v (data is still safe in DB)", queueName, err)
-	} else {
-		log.Printf("Event emitted to %s: operation=%s userID=%d", queueName, operation, userID)
+		return apperrors.NewInternal("failed to marshal domain event", err)
 	}
+
+	auditPayload, err := json.Marshal(UserEventPayload{
+		EventType: "audit",
+		Entity:    "user",
+		Operation: operation,
+		User: UserSnapshot{
+			ID:        user.ID,
+			Name:      user.Name,
+			Email:     user.Email,
+			CreatedAt: user.CreatedAt,
+		},
+		Timestamp: time.Now().UTC(),
+	})
+	if err != nil {
+		return apperrors.NewInternal("failed to marshal audit event", err)
+	}
+
+	if _, err = client.PutRecord(ctx, &kinesis.PutRecordInput{
+		StreamName:   aws.String(domainStream),
+		Data:         domainPayload,
+		PartitionKey: aws.String(partitionKey),
+	}); err != nil {
+		return apperrors.NewInternal("failed to publish domain event", err)
+	}
+
+	if _, err = client.PutRecord(ctx, &kinesis.PutRecordInput{
+		StreamName:   aws.String(auditStream),
+		Data:         auditPayload,
+		PartitionKey: aws.String(partitionKey),
+	}); err != nil {
+		return apperrors.NewInternal("failed to publish audit event", err)
+	}
+
+	logger.Info("events_emitted_to_kinesis", map[string]any{
+		"operation":     operation,
+		"user_id":       user.ID,
+		"domain_stream": domainStream,
+		"audit_stream":  auditStream,
+	})
+	return nil
 }

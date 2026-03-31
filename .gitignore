@@ -1,0 +1,19 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build and deploy artifacts
+bootstrap
+*.zip
+*_bin
+
+# Local runtime/cache folders
+volume/cache/
+volume/logs/
+volume/tmp/
+volume/lib/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
