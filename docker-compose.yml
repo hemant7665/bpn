@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   localstack:
     # LocalStack Pro required for RDS support.
@@ -12,8 +10,12 @@ services:
       - "4510-4559:4510-4559"
     environment:
       - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
+      # Pro: emulated DMS API (see LOCAL_DEV_GUIDE.md §6 and setup_dms_cdc.ps1)
+      - ENABLE_DMS=1
       - DEBUG=1
       - DOCKER_HOST=unix:///var/run/docker.sock
+      # Same user-defined network as compose (see LocalStack MAIN_DOCKER_NETWORK) so Lambdas resolve the stack.
+      - MAIN_DOCKER_NETWORK=bpn-network
     volumes:
       # Docker socket — lets LocalStack spawn postgres as a sibling container
       - "//var/run/docker.sock:/var/run/docker.sock"

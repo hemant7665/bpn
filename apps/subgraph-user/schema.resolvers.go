@@ -7,88 +7,213 @@ package main
 
 import (
 	"context"
+	"project-serverless/apps/subgraph-user/orchestrator"
 	"strconv"
 	"time"
 )
 
 // CreateUser is the resolver for the createUser field.
-func (r *mutationResolver) CreateUser(ctx context.Context, name string, email string) (*User, error) {
-	domainUser, err := r.Orchestrator.CreateUser(ctx, name, email)
+func (r *mutationResolver) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+	params := orchestrator.CreateUserParams{
+		Username: input.Username,
+		Email:    input.Email,
+		Password: input.Password,
+	}
+	if input.TenantID != nil {
+		params.TenantID = *input.TenantID
+	}
+	if input.PhoneNo != nil {
+		params.PhoneNo = *input.PhoneNo
+	}
+	if input.DateOfBirth != nil {
+		params.DateOfBirth = *input.DateOfBirth
+	}
+	if input.Gender != nil {
+		params.Gender = *input.Gender
+	}
+
+	u, err := r.Orchestrator.CreateUser(ctx, params)
 	if err != nil {
 		return nil, err
 	}
+	out := &User{
+		ID:        strconv.Itoa(u.ID),
+		TenantID:  u.TenantID,
+		Username:  u.Username,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt.Format(time.RFC3339),
+	}
+	if u.PhoneNo != "" {
+		p := u.PhoneNo
+		out.PhoneNo = &p
+	}
+	if u.Gender != "" {
+		g := u.Gender
+		out.Gender = &g
+	}
+	if u.DateOfBirth != nil {
+		s := u.DateOfBirth.Format("2006-01-02")
+		out.DateOfBirth = &s
+	}
+	return out, nil
+}
 
-	return &User{
-		ID:        strconv.Itoa(domainUser.ID),
-		Name:      domainUser.Name,
-		Email:     domainUser.Email,
-		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
-	}, nil
+// Login is the resolver for the login field.
+func (r *mutationResolver) Login(ctx context.Context, email string, password string) (*AuthPayload, error) {
+	token, err := r.Orchestrator.Login(ctx, email, password)
+	if err != nil {
+		return nil, err
+	}
+	return &AuthPayload{Token: token}, nil
 }
 
 // UpdateUser is the resolver for the updateUser field.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id string, name string, email string) (*User, error) {
-	domainUser, err := r.Orchestrator.UpdateUser(ctx, id, name, email)
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+	params := orchestrator.UpdateUserParams{
+		Username: input.Username,
+		Email:    input.Email,
+	}
+	if input.PhoneNo != nil {
+		params.PhoneNo = *input.PhoneNo
+	}
+	if input.DateOfBirth != nil {
+		params.DateOfBirth = *input.DateOfBirth
+	}
+	if input.Gender != nil {
+		params.Gender = *input.Gender
+	}
+
+	u, err := r.Orchestrator.UpdateUser(ctx, id, params)
 	if err != nil {
 		return nil, err
 	}
-
-	return &User{
-		ID:        strconv.Itoa(domainUser.ID),
-		Name:      domainUser.Name,
-		Email:     domainUser.Email,
-		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
-	}, nil
+	out := &User{
+		ID:        strconv.Itoa(u.ID),
+		TenantID:  u.TenantID,
+		Username:  u.Username,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt.Format(time.RFC3339),
+	}
+	if u.PhoneNo != "" {
+		p := u.PhoneNo
+		out.PhoneNo = &p
+	}
+	if u.Gender != "" {
+		g := u.Gender
+		out.Gender = &g
+	}
+	if u.DateOfBirth != nil {
+		s := u.DateOfBirth.Format("2006-01-02")
+		out.DateOfBirth = &s
+	}
+	return out, nil
 }
 
 // DeleteUser is the resolver for the deleteUser field.
 func (r *mutationResolver) DeleteUser(ctx context.Context, id string) (*User, error) {
-	domainUser, err := r.Orchestrator.DeleteUser(ctx, id)
+	u, err := r.Orchestrator.DeleteUser(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	return &User{
-		ID:        strconv.Itoa(domainUser.ID),
-		Name:      domainUser.Name,
-		Email:     domainUser.Email,
-		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
-	}, nil
+	out := &User{
+		ID:        strconv.Itoa(u.ID),
+		TenantID:  u.TenantID,
+		Username:  u.Username,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt.Format(time.RFC3339),
+	}
+	if u.PhoneNo != "" {
+		p := u.PhoneNo
+		out.PhoneNo = &p
+	}
+	if u.Gender != "" {
+		g := u.Gender
+		out.Gender = &g
+	}
+	if u.DateOfBirth != nil {
+		s := u.DateOfBirth.Format("2006-01-02")
+		out.DateOfBirth = &s
+	}
+	return out, nil
 }
 
 // GetUser is the resolver for the getUser field.
 func (r *queryResolver) GetUser(ctx context.Context, id string) (*User, error) {
-	domainUser, err := r.Orchestrator.GetUser(ctx, id)
+	s, err := r.Orchestrator.GetUser(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	return &User{
-		ID:        strconv.Itoa(domainUser.ID),
-		Name:      domainUser.Name,
-		Email:     domainUser.Email,
-		CreatedAt: domainUser.CreatedAt.Format(time.RFC3339),
-	}, nil
+	out := &User{
+		ID:        strconv.Itoa(s.ID),
+		TenantID:  s.TenantID,
+		Username:  s.Username,
+		Email:     s.Email,
+		CreatedAt: s.CreatedAt.Format(time.RFC3339),
+	}
+	if s.PhoneNo != "" {
+		p := s.PhoneNo
+		out.PhoneNo = &p
+	}
+	if s.Gender != "" {
+		g := s.Gender
+		out.Gender = &g
+	}
+	if s.DateOfBirth != nil {
+		d := s.DateOfBirth.Format("2006-01-02")
+		out.DateOfBirth = &d
+	}
+	return out, nil
 }
 
 // ListUsers is the resolver for the listUsers field.
-func (r *queryResolver) ListUsers(ctx context.Context) ([]*User, error) {
-	domainUsers, err := r.Orchestrator.ListUsers(ctx)
+func (r *queryResolver) ListUsers(ctx context.Context, skip *int, limit *int, filter *UserListFilter) (*UserListPayload, error) {
+	sk := 0
+	if skip != nil {
+		sk = *skip
+	}
+	li := 0
+	if limit != nil {
+		li = *limit
+	}
+	var uname, em *string
+	if filter != nil {
+		uname = filter.Username
+		em = filter.Email
+	}
+
+	payload, err := r.Orchestrator.ListUsers(ctx, sk, li, uname, em)
 	if err != nil {
 		return nil, err
 	}
 
-	users := make([]*User, 0, len(domainUsers))
-	for _, domainUser := range domainUsers {
-		u := domainUser
-		users = append(users, &User{
-			ID:        strconv.Itoa(u.ID),
-			Name:      u.Name,
-			Email:     u.Email,
-			CreatedAt: u.CreatedAt.Format(time.RFC3339),
-		})
+	items := make([]*User, 0, len(payload.Items))
+	for i := range payload.Items {
+		s := &payload.Items[i]
+		out := &User{
+			ID:        strconv.Itoa(s.ID),
+			TenantID:  s.TenantID,
+			Username:  s.Username,
+			Email:     s.Email,
+			CreatedAt: s.CreatedAt.Format(time.RFC3339),
+		}
+		if s.PhoneNo != "" {
+			p := s.PhoneNo
+			out.PhoneNo = &p
+		}
+		if s.Gender != "" {
+			g := s.Gender
+			out.Gender = &g
+		}
+		if s.DateOfBirth != nil {
+			d := s.DateOfBirth.Format("2006-01-02")
+			out.DateOfBirth = &d
+		}
+		items = append(items, out)
 	}
-	return users, nil
+	return &UserListPayload{
+		Items: items,
+		Total: int(payload.Total),
+	}, nil
 }
 
 // Mutation returns MutationResolver implementation.

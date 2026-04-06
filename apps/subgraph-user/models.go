@@ -2,15 +2,51 @@
 
 package main
 
+type AuthPayload struct {
+	Token string `json:"token"`
+}
+
+type CreateUserInput struct {
+	TenantID    *string `json:"tenantId,omitempty"`
+	Username    string  `json:"username"`
+	Email       string  `json:"email"`
+	Password    string  `json:"password"`
+	PhoneNo     *string `json:"phoneNo,omitempty"`
+	DateOfBirth *string `json:"dateOfBirth,omitempty"`
+	Gender      *string `json:"gender,omitempty"`
+}
+
 type Mutation struct {
 }
 
 type Query struct {
 }
 
+type UpdateUserInput struct {
+	Username    string  `json:"username"`
+	Email       string  `json:"email"`
+	PhoneNo     *string `json:"phoneNo,omitempty"`
+	DateOfBirth *string `json:"dateOfBirth,omitempty"`
+	Gender      *string `json:"gender,omitempty"`
+}
+
 type User struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	CreatedAt string `json:"createdAt"`
+	ID          string  `json:"id"`
+	TenantID    string  `json:"tenantId"`
+	Username    string  `json:"username"`
+	Email       string  `json:"email"`
+	PhoneNo     *string `json:"phoneNo,omitempty"`
+	DateOfBirth *string `json:"dateOfBirth,omitempty"`
+	Gender      *string `json:"gender,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
+}
+
+type UserListFilter struct {
+	Username *string `json:"username,omitempty"`
+	Email    *string `json:"email,omitempty"`
+}
+
+type UserListPayload struct {
+	Items []*User `json:"items"`
+	Total int     `json:"total"`
 }

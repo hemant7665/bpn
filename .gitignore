@@ -8,12 +8,13 @@ bootstrap
 *.zip
 *_bin
 
-# Local runtime/cache folders
-volume/cache/
-volume/logs/
-volume/tmp/
-volume/lib/
+# Local runtime (LocalStack data, build outputs, certs — do not commit)
+volume/
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# Local helper scripts
+deploy_all.ps1
+setup_localstack.ps1

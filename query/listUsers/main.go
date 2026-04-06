@@ -4,37 +4,85 @@ import (
 	"context"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/lambda"
 
-	"project-serverless/internal/apperrors"
+	"project-serverless/internal/auth"
 	"project-serverless/internal/bootstrap"
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
-	"project-serverless/internal/repository"
+	"project-serverless/internal/service"
 )
 
 type Dependencies struct {
-	repo repository.UserRepository
+	userService service.UserService
 }
 
 var deps Dependencies
 
+const (
+	defaultLimit = 10
+	maxLimit     = 100
+)
+
+type ListUsersRequest struct {
+	Skip          int    `json:"skip"`
+	Limit         int    `json:"limit"`
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	Authorization string `json:"authorization"`
+}
+
+type ListUsersResponse struct {
+	Items []domain.UserSummary `json:"items"`
+	Total int64                `json:"total"`
+}
+
 func setupDependencies() error {
-	repo, err := bootstrap.SetupUserRepository()
+	svc, err := bootstrap.SetupUserService()
 	if err != nil {
-		return apperrors.NewInternal("database connection failed", err)
+		return svcerrors.Internal("database connection failed", err)
 	}
-	deps.repo = repo
+	deps.userService = svc
 	return nil
 }
 
-func HandleRequest(ctx context.Context) ([]domain.UserSummary, error) {
-	users, err := deps.repo.ListUsers(ctx)
-	if err != nil {
-		return nil, apperrors.NewInternal("list users failed", err)
+func HandleRequest(ctx context.Context, req ListUsersRequest) (*ListUsersResponse, error) {
+	if _, err := auth.AuthorizeHeader(req.Authorization); err != nil {
+		return nil, svcerrors.Unauthorized("unauthorized")
 	}
-	return users, nil
+
+	limit := req.Limit
+	if limit == 0 {
+		limit = defaultLimit
+	}
+	if limit < 1 {
+		return nil, svcerrors.Validation("limit must be greater than 0")
+	}
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+	if req.Skip < 0 {
+		return nil, svcerrors.Validation("skip must be >= 0")
+	}
+
+	filter := domain.ListUsersFilter{}
+	if strings.TrimSpace(req.Username) != "" {
+		u := strings.TrimSpace(req.Username)
+		filter.Username = &u
+	}
+	if strings.TrimSpace(req.Email) != "" {
+		e := strings.TrimSpace(req.Email)
+		filter.Email = &e
+	}
+
+	items, total, err := deps.userService.ListUsersFiltered(ctx, req.Skip, limit, filter)
+	if err != nil {
+		return nil, svcerrors.Internal("list users failed", err)
+	}
+	return &ListUsersResponse{Items: items, Total: total}, nil
 }
 
 func main() {

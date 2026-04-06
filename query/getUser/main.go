@@ -7,41 +7,46 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 
-	"project-serverless/internal/apperrors"
+	"project-serverless/internal/auth"
 	"project-serverless/internal/bootstrap"
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
-	"project-serverless/internal/repository"
+	"project-serverless/internal/service"
 	"project-serverless/internal/validator"
 )
 
 type Dependencies struct {
-	repo repository.UserRepository
+	userService service.UserService
 }
 
 var deps Dependencies
 
 type GetUserRequest struct {
-	ID interface{} `json:"id"`
+	ID            interface{} `json:"id"`
+	Authorization string      `json:"authorization"`
 }
 
 func setupDependencies() error {
-	repo, err := bootstrap.SetupUserRepository()
+	svc, err := bootstrap.SetupUserService()
 	if err != nil {
-		return apperrors.NewInternal("database connection failed", err)
+		return svcerrors.Internal("database connection failed", err)
 	}
-	deps.repo = repo
+	deps.userService = svc
 	return nil
 }
 
 func HandleRequest(ctx context.Context, req GetUserRequest) (*domain.UserSummary, error) {
+	if _, err := auth.AuthorizeHeader(req.Authorization); err != nil {
+		return nil, svcerrors.Unauthorized("unauthorized")
+	}
 	idInt, err := validator.ParsePositiveIntID(req.ID)
 	if err != nil {
 		return nil, err
 	}
-	user, err := deps.repo.GetUser(ctx, idInt)
+	user, err := deps.userService.GetUser(ctx, idInt)
 	if err != nil {
-		return nil, apperrors.NewNotFound("user not found")
+		return nil, svcerrors.NotFound("user not found")
 	}
 	return user, nil
 }
@@ -53,7 +58,6 @@ func main() {
 			logger.Error("unhandled_panic", map[string]any{"panic": r, "stack": string(debug.Stack())})
 		}
 	}()
-
 	if err := setupDependencies(); err != nil {
 		logger.Error("failed_to_initialize_lambda_dependencies", map[string]any{"error": err.Error()})
 		panic(err)

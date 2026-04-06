@@ -1,19 +1,57 @@
+scalar AWSDate
 scalar AWSDateTime
 
 type Query {
   getUser(id: ID!): User
-  listUsers: [User!]!
+  listUsers(skip: Int, limit: Int, filter: UserListFilter): UserListPayload!
 }
 
 type Mutation {
-  createUser(name: String!, email: String!): User!
-  updateUser(id: ID!, name: String!, email: String!): User!
+  createUser(input: CreateUserInput!): User!
+  login(email: String!, password: String!): AuthPayload!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
   deleteUser(id: ID!): User!
+}
+
+input CreateUserInput {
+  tenantId: String
+  username: String!
+  email: String!
+  password: String!
+  phoneNo: String
+  dateOfBirth: AWSDate
+  gender: String
+}
+
+input UpdateUserInput {
+  username: String!
+  email: String!
+  phoneNo: String
+  dateOfBirth: AWSDate
+  gender: String
+}
+
+input UserListFilter {
+  username: String
+  email: String
+}
+
+type UserListPayload {
+  items: [User!]!
+  total: Int!
 }
 
 type User {
   id: ID!
-  name: String!
+  tenantId: String!
+  username: String!
   email: String!
+  phoneNo: String
+  dateOfBirth: AWSDate
+  gender: String
   createdAt: AWSDateTime!
+}
+
+type AuthPayload {
+  token: String!
 }

@@ -2,62 +2,94 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"runtime/debug"
+	"strconv"
 
 	"github.com/aws/aws-lambda-go/lambda"
 
-	"project-serverless/internal/apperrors"
+	"project-serverless/internal/auth"
 	"project-serverless/internal/bootstrap"
-	"project-serverless/internal/db"
 	"project-serverless/internal/domain"
 	"project-serverless/internal/events"
+	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
-	"project-serverless/internal/repository"
+	"project-serverless/internal/service"
 	"project-serverless/internal/validator"
 )
 
 type DeleteUserRequest struct {
-	ID int `json:"id" validate:"required,gt=0"`
+	ID            int    `json:"id" validate:"required,gt=0"`
+	Authorization string `json:"authorization" validate:"required"`
+}
+
+type auditPublisher interface {
+	EmitUserAudit(ctx context.Context, operation string, user domain.User) error
+}
+
+type domainEventPublisher interface {
+	PutRecordJSON(ctx context.Context, partitionKey string, payload []byte) error
 }
 
 type dependencies struct {
-	repo repository.UserRepository
+	userService       service.UserService
+	auditEmitter      auditPublisher
+	domainPublisher   domainEventPublisher
 }
 
 var deps dependencies
 
 func setupDependencies() error {
-	repo, err := bootstrap.SetupUserRepository()
+	svc, err := bootstrap.SetupUserService()
 	if err != nil {
-		return apperrors.NewInternal("database connection failed", err)
+		return svcerrors.Internal("database connection failed", err)
 	}
-	deps.repo = repo
+	auditEmitter, err := events.NewAuditEmitter(context.Background())
+	if err != nil {
+		return err
+	}
+	domainPub, err := events.NewDomainEventPublisher(context.Background())
+	if err != nil {
+		return err
+	}
+	deps.userService = svc
+	deps.auditEmitter = auditEmitter
+	deps.domainPublisher = domainPub
 	return nil
 }
 
 func HandleRequest(ctx context.Context, req DeleteUserRequest) (*domain.User, error) {
 	if err := validator.ValidateStruct(req); err != nil {
-		return nil, apperrors.NewValidation("id must be greater than 0")
+		return nil, svcerrors.Validation("id and authorization are required")
+	}
+	if _, err := auth.AuthorizeHeader(req.Authorization); err != nil {
+		return nil, svcerrors.Unauthorized("unauthorized")
 	}
 
-	// Fetch from write model (source of truth — always consistent)
-	var existing domain.User
-	if err := db.GetDB().WithContext(ctx).Where("id = ?", req.ID).First(&existing).Error; err != nil {
-		return nil, apperrors.NewNotFound("user not found")
+	existing, err := deps.userService.GetWriteUserByID(ctx, req.ID)
+	if err != nil {
+		return nil, svcerrors.NotFound("user not found")
 	}
 
-	// Delete from write model
-	if err := deps.repo.DeleteUser(ctx, req.ID); err != nil {
-		return nil, apperrors.NewInternal("failed to delete user", err)
+	if err := deps.userService.DeleteUser(ctx, req.ID); err != nil {
+		return nil, svcerrors.Internal("failed to delete user", err)
 	}
 	logger.Info("user_deleted", map[string]any{"user_id": req.ID})
 
-	// Publish domain and audit events to Kinesis
-	if err := events.EmitUserEvents(ctx, "delete", existing); err != nil {
-		return nil, apperrors.NewInternal("user deleted but event dispatch failed", err)
+	if err := deps.auditEmitter.EmitUserAudit(ctx, "delete", *existing); err != nil {
+		return nil, svcerrors.Internal("user deleted but audit emit failed", err)
 	}
 
-	return &existing, nil
+	ev := events.NewUserUpdatedEventFromUser(existing, true)
+	payload, err := json.Marshal(ev)
+	if err != nil {
+		return nil, svcerrors.Internal("domain event marshal failed", err)
+	}
+	if err := deps.domainPublisher.PutRecordJSON(ctx, strconv.Itoa(existing.ID), payload); err != nil {
+		logger.Info("domain_event_emit_failed", map[string]any{"error": err.Error(), "user_id": existing.ID})
+	}
+
+	return existing, nil
 }
 
 func main() {

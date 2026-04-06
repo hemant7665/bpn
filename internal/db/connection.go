@@ -4,9 +4,10 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 
-	"project-serverless/internal/apperrors"
+	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
 
 	"gorm.io/driver/postgres"
@@ -23,11 +24,6 @@ var (
 )
 
 // Connect initializes the singleton GORM database instance.
-// It reads DATABASE_URL from the environment — set to:
-//
-//	postgres://postgres:POSTGRES@localhost.localstack.cloud:4510/<dbname>?sslmode=disable
-//
-// when running against LocalStack RDS.
 func Connect() (*gorm.DB, error) {
 	if os.Getenv("APP_ENV") == "test" {
 		return nil, nil
@@ -41,21 +37,21 @@ func Connect() (*gorm.DB, error) {
 			return
 		}
 
+		dsn = withPostgresSearchPath(dsn)
+
 		host, dbname := maskDSNForLog(dsn)
 		logger.Info("connecting_to_database", map[string]any{"host": host, "db": dbname})
 		dbInstance, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
-			err = apperrors.NewInternal(ErrDatabaseURLInvalid.Error(), err)
+			err = svcerrors.Internal(ErrDatabaseURLInvalid.Error(), err)
 			return
 		}
 
-		// Configure connection pool.
-		// Lambda containers are short-lived — keep pool small to avoid exhaustion.
 		sqlDB, sqlErr := dbInstance.DB()
 		if sqlErr == nil {
 			sqlDB.SetMaxOpenConns(5)
 			sqlDB.SetMaxIdleConns(2)
-			sqlDB.SetConnMaxLifetime(0) // reuse until Lambda container dies
+			sqlDB.SetConnMaxLifetime(0)
 		}
 	})
 
@@ -66,8 +62,6 @@ func Connect() (*gorm.DB, error) {
 	return dbInstance, nil
 }
 
-// ConnectWithDialector initializes the singleton instance with a custom dialector.
-// Useful for testing with sqlmock or alternative drivers.
 func ConnectWithDialector(dialector gorm.Dialector, config *gorm.Config) (*gorm.DB, error) {
 	var err error
 	once.Do(func() {
@@ -75,14 +69,12 @@ func ConnectWithDialector(dialector gorm.Dialector, config *gorm.Config) (*gorm.
 	})
 
 	if err != nil {
-		return nil, apperrors.NewInternal("failed to connect to database", err)
+		return nil, svcerrors.Internal("failed to connect to database", err)
 	}
 
 	return dbInstance, nil
 }
 
-// GetDB returns the singleton database instance.
-// Panics if called before Connect — this is intentional, it surfaces misconfiguration early.
 func GetDB() *gorm.DB {
 	if testDB != nil {
 		return testDB
@@ -93,9 +85,27 @@ func GetDB() *gorm.DB {
 	return dbInstance
 }
 
-// SetDB overrides the db instance, used in tests.
 func SetDB(db *gorm.DB) {
 	testDB = db
+}
+
+// withPostgresSearchPath sets libpq options so GORM table names "users" / "users_summary"
+// resolve to write_model.users and read_model.users_summary (CQRS).
+func withPostgresSearchPath(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil || u.Scheme == "" {
+		return dsn
+	}
+	q := u.Query()
+	if q.Get("options") != "" {
+		return dsn
+	}
+	if strings.Contains(strings.ToLower(u.RawQuery), "search_path") {
+		return dsn
+	}
+	q.Set("options", "-csearch_path=write_model,read_model,public")
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func maskDSNForLog(dsn string) (host string, dbname string) {

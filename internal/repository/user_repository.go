@@ -2,28 +2,29 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"project-serverless/internal/domain"
 )
 
-// UserRepository defines write operations against write_model.users
-// and read operations against read_model.users_summary.
 type UserRepository interface {
-	// Write ops — target write_model.users
 	CreateUser(ctx context.Context, user *domain.User) error
+	GetWriteUserByID(ctx context.Context, id int) (*domain.User, error)
 	UpdateUser(ctx context.Context, user *domain.User) error
 	DeleteUser(ctx context.Context, id int) error
 
-	// Read ops — target read_model.users_summary (materialized view)
 	GetUser(ctx context.Context, id int) (*domain.UserSummary, error)
-	ListUsers(ctx context.Context) ([]domain.UserSummary, error)
+	GetUserByEmail(ctx context.Context, tenantID, email string) (*domain.User, error)
 
-	// Read model maintenance ops for event-driven projection updates.
-	UpsertUserSummary(ctx context.Context, summary *domain.UserSummary) error
-	DeleteUserSummary(ctx context.Context, id int) error
+	ListUsersFiltered(ctx context.Context, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, error)
+	CountUsersFiltered(ctx context.Context, filter domain.ListUsersFilter) (int64, error)
+
+	// RefreshUsersSummaryView refreshes read_model.users_summary (CONCURRENTLY when possible).
+	RefreshUsersSummaryView(ctx context.Context) error
+	// SaveUserReadModel refreshes the MV after domain-style events (same projection as BluePrint readmodel.SaveUser).
+	SaveUserReadModel(ctx context.Context, user *domain.User) error
 }
 
 type userRepositoryImpl struct {
@@ -34,11 +35,16 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepositoryImpl{db: db}
 }
 
-// --- Write operations (write_model.users) ---
-
 func (r *userRepositoryImpl) CreateUser(ctx context.Context, user *domain.User) error {
-	// GORM uses domain.User.TableName() → write_model.users
 	return r.db.WithContext(ctx).Create(user).Error
+}
+
+func (r *userRepositoryImpl) GetWriteUserByID(ctx context.Context, id int) (*domain.User, error) {
+	var u domain.User
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 func (r *userRepositoryImpl) UpdateUser(ctx context.Context, user *domain.User) error {
@@ -49,36 +55,73 @@ func (r *userRepositoryImpl) DeleteUser(ctx context.Context, id int) error {
 	return r.db.WithContext(ctx).Delete(&domain.User{}, id).Error
 }
 
-// --- Read operations (read_model.users_summary) ---
-
 func (r *userRepositoryImpl) GetUser(ctx context.Context, id int) (*domain.UserSummary, error) {
 	var summary domain.UserSummary
-	// GORM uses domain.UserSummary.TableName() → read_model.users_summary
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&summary).Error; err != nil {
 		return nil, err
 	}
 	return &summary, nil
 }
 
-func (r *userRepositoryImpl) ListUsers(ctx context.Context) ([]domain.UserSummary, error) {
+func (r *userRepositoryImpl) GetUserByEmail(ctx context.Context, tenantID, email string) (*domain.User, error) {
+	tid := strings.TrimSpace(tenantID)
+	if tid == "" {
+		tid = "default-tenant"
+	}
+	var user domain.User
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND lower(email) = ?", tid, strings.ToLower(strings.TrimSpace(email))).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepositoryImpl) applyListFilters(db *gorm.DB, filter domain.ListUsersFilter) *gorm.DB {
+	if filter.Username != nil && strings.TrimSpace(*filter.Username) != "" {
+		pat := "%" + strings.ToLower(strings.TrimSpace(*filter.Username)) + "%"
+		db = db.Where("lower(username) LIKE ?", pat)
+	}
+	if filter.Email != nil && strings.TrimSpace(*filter.Email) != "" {
+		pat := "%" + strings.ToLower(strings.TrimSpace(*filter.Email)) + "%"
+		db = db.Where("lower(email) LIKE ?", pat)
+	}
+	return db
+}
+
+func (r *userRepositoryImpl) ListUsersFiltered(ctx context.Context, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, error) {
 	var summaries []domain.UserSummary
-	if err := r.db.WithContext(ctx).Find(&summaries).Error; err != nil {
+	q := r.db.WithContext(ctx).Model(&domain.UserSummary{})
+	q = r.applyListFilters(q, filter)
+	if err := q.Order("id ASC").Offset(skip).Limit(limit).Find(&summaries).Error; err != nil {
 		return nil, err
 	}
 	return summaries, nil
 }
 
-// --- Read model projection maintenance ---
-
-func (r *userRepositoryImpl) UpsertUserSummary(ctx context.Context, summary *domain.UserSummary) error {
-	return r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"name", "email", "created_at"}),
-		}).
-		Create(summary).Error
+func (r *userRepositoryImpl) CountUsersFiltered(ctx context.Context, filter domain.ListUsersFilter) (int64, error) {
+	var n int64
+	q := r.db.WithContext(ctx).Model(&domain.UserSummary{})
+	q = r.applyListFilters(q, filter)
+	if err := q.Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
-func (r *userRepositoryImpl) DeleteUserSummary(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&domain.UserSummary{}, id).Error
+func (r *userRepositoryImpl) RefreshUsersSummaryView(ctx context.Context) error {
+	sqlDB, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := sqlDB.ExecContext(ctx, "REFRESH MATERIALIZED VIEW CONCURRENTLY read_model.users_summary"); err != nil {
+		_, err2 := sqlDB.ExecContext(ctx, "REFRESH MATERIALIZED VIEW read_model.users_summary")
+		return err2
+	}
+	return nil
+}
+
+func (r *userRepositoryImpl) SaveUserReadModel(ctx context.Context, _ *domain.User) error {
+	return r.RefreshUsersSummaryView(ctx)
 }

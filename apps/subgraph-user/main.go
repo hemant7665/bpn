@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 
 	"project-serverless/apps/subgraph-user/orchestrator"
 	"project-serverless/internal/logger"
+	"project-serverless/internal/middleware"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -88,13 +90,20 @@ func main() {
 		},
 	}))
 
-	corsHandler = gqlServer
+	// Auth at subgraph boundary (BluePrint-style); allow unauthenticated registration + login.
+	authWrapped := middleware.AuthMiddleware([]string{"createUser", "login"})(gqlServer)
+	corsHandler = authWrapped
 
 	if os.Getenv("ENVIRONMENT") == "local" {
-		logger.Info("starting_graphql_playground", map[string]any{"url": "http://localhost:4003/"})
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "4003"
+		}
+		addr := ":" + port
+		logger.Info("starting_graphql_playground", map[string]any{"url": fmt.Sprintf("http://localhost%s/", addr)})
 		http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 		http.Handle("/query", corsHandler)
-		if err := http.ListenAndServe(":4003", nil); err != nil {
+		if err := http.ListenAndServe(addr, nil); err != nil {
 			panic(err)
 		}
 	} else {

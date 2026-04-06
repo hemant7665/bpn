@@ -1,0 +1,14 @@
+{
+  "rules": [
+    {
+      "rule-type": "selection",
+      "rule-id": "1",
+      "rule-name": "select-write-model-users",
+      "object-locator": {
+        "schema-name": "write_model",
+        "table-name": "users"
+      },
+      "rule-action": "include"
+    }
+  ]
+}

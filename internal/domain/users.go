@@ -2,30 +2,41 @@ package domain
 
 import "time"
 
-// WriteUser maps to write_model.users — the source-of-truth table.
-// GORM uses TableName() to route writes to the correct schema.
+// User is the write_model.users aggregate (CQRS command side).
 type User struct {
-	ID        int       `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name      string    `json:"name" gorm:"not null"`
-	Email     string    `json:"email" gorm:"not null"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           int        `json:"id" gorm:"primaryKey;autoIncrement"`
+	TenantID     string     `json:"tenant_id" gorm:"column:tenant_id;not null"`
+	Username     string     `json:"username" gorm:"not null"`
+	Email        string     `json:"email" gorm:"not null"`
+	PhoneNo      string     `json:"phone_no" gorm:"column:phone_no"`
+	DateOfBirth  *time.Time `json:"date_of_birth,omitempty" gorm:"column:date_of_birth;type:date"`
+	Gender       string     `json:"gender"`
+	PasswordHash string     `json:"-" gorm:"column:password_hash;not null"`
+	CreatedAt    time.Time  `json:"created_at" gorm:"autoCreateTime"`
 }
 
-// TableName tells GORM to use the write_model schema for this struct.
 func (User) TableName() string {
-	return "write_model.users"
+	return "users"
 }
 
-// UserSummary maps to read_model.users_summary — the materialized view.
-// Used exclusively for read queries.
+// UserSummary maps read_model.users_summary (Postgres MATERIALIZED VIEW over write_model.users).
 type UserSummary struct {
-	ID        int       `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          int        `json:"id"`
+	TenantID    string     `json:"tenant_id"`
+	Username    string     `json:"username"`
+	Email       string     `json:"email"`
+	PhoneNo     string     `json:"phone_no"`
+	DateOfBirth *time.Time `json:"date_of_birth,omitempty" gorm:"column:date_of_birth;type:date"`
+	Gender      string     `json:"gender"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
-// TableName tells GORM to query the read_model materialized view.
 func (UserSummary) TableName() string {
-	return "read_model.users_summary"
+	return "users_summary"
+}
+
+// ListUsersFilter holds optional filters for list queries.
+type ListUsersFilter struct {
+	Username *string
+	Email    *string
 }
