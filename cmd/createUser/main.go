@@ -101,7 +101,7 @@ func HandleRequest(ctx context.Context, req CreateUserRequest) (*domain.User, er
 	}
 
 	if err := deps.userService.CreateUser(ctx, user); err != nil {
-		if errors.Is(err, service.ErrEmailAlreadyExists) {
+		if errors.Is(err, svcerrors.ErrEmailAlreadyExists) {
 			return nil, svcerrors.Conflict("user with this email already exists for this tenant")
 		}
 		if errors.Is(err, gorm.ErrDuplicatedKey) {

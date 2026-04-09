@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 )
 
 type createUserServiceMock struct {
@@ -102,7 +102,7 @@ func TestHandleRequest_CreateUserEventFailure(t *testing.T) {
 	}
 	deps.auditEmitter = mockAudit{
 		emitFn: func(_ context.Context, _ string, _ domain.User) error {
-			return errors.New("kinesis down")
+			return svcerrors.Internal("kinesis down", nil)
 		},
 	}
 	deps.domainPublisher = noopDomainPub{}

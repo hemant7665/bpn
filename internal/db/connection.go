@@ -1,7 +1,6 @@
 package db
 
 import (
-	"errors"
 	"net/url"
 	"os"
 	"strings"
@@ -15,9 +14,6 @@ import (
 )
 
 var (
-	ErrDatabaseURLNotSet  = errors.New("database URL is not set")
-	ErrDatabaseURLInvalid = errors.New("database URL is invalid")
-
 	dbInstance *gorm.DB
 	once       sync.Once
 	testDB     *gorm.DB
@@ -33,7 +29,7 @@ func Connect() (*gorm.DB, error) {
 	once.Do(func() {
 		dsn := os.Getenv("DATABASE_URL")
 		if dsn == "" {
-			err = ErrDatabaseURLNotSet
+			err = svcerrors.ErrDatabaseURLNotSet
 			return
 		}
 
@@ -43,7 +39,7 @@ func Connect() (*gorm.DB, error) {
 		logger.Info("connecting_to_database", map[string]any{"host": host, "db": dbname})
 		dbInstance, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
-			err = svcerrors.Internal(ErrDatabaseURLInvalid.Error(), err)
+			err = svcerrors.Internal(svcerrors.ErrDatabaseURLInvalid.Message, err)
 			return
 		}
 

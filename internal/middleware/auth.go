@@ -104,6 +104,10 @@ func graphqlShouldSkipAuth(r *http.Request, skip map[string]struct{}) (skipAuth 
 	if name == "" && q != "" {
 		name = extractBareOperationName(q)
 	}
+	// Anonymous operations: `mutation { login(...) }` has no operation name; match first root field.
+	if name == "" && q != "" {
+		name = extractAnonymousMutationFirstField(q)
+	}
 	if name != "" {
 		if _, s := skip[strings.ToLower(name)]; s {
 			return true, true
@@ -115,10 +119,21 @@ func graphqlShouldSkipAuth(r *http.Request, skip map[string]struct{}) (skipAuth 
 
 var operationNameRegex = regexp.MustCompile(`(?i)(query|mutation|subscription)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 
+// anonymousMutationFirstField matches `mutation { login` / `mutation{createUser` (no operation name).
+var anonymousMutationFirstFieldRegex = regexp.MustCompile(`(?i)mutation\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)`)
+
 func extractBareOperationName(query string) string {
 	m := operationNameRegex.FindStringSubmatch(query)
 	if len(m) >= 3 {
 		return m[2]
+	}
+	return ""
+}
+
+func extractAnonymousMutationFirstField(query string) string {
+	m := anonymousMutationFirstFieldRegex.FindStringSubmatch(query)
+	if len(m) >= 2 {
+		return m[1]
 	}
 	return ""
 }

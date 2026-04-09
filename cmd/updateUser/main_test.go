@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 )
 
 type updateUserServiceMock struct {
@@ -20,7 +20,7 @@ func (m updateUserServiceMock) GetWriteUserByID(ctx context.Context, id int) (*d
 	if m.getByIDFn != nil {
 		return m.getByIDFn(ctx, id)
 	}
-	return nil, errors.New("not found")
+	return nil, svcerrors.NotFound("not found")
 }
 func (m updateUserServiceMock) UpdateUser(ctx context.Context, user *domain.User) error {
 	if m.updateUser != nil {

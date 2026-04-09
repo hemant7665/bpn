@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -9,6 +8,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	svcerrors "project-serverless/internal/errors"
 )
 
 type Claims struct {
@@ -32,7 +33,7 @@ func VerifyPassword(password string, passwordHash string) bool {
 func GenerateToken(userID int, email string) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		return "", errors.New("JWT_SECRET is required")
+		return "", svcerrors.Internal("JWT_SECRET is required", nil)
 	}
 
 	now := time.Now().UTC()
@@ -54,22 +55,22 @@ func GenerateToken(userID int, email string) (string, error) {
 func ValidateToken(tokenString string) (*Claims, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		return nil, errors.New("JWT_SECRET is required")
+		return nil, svcerrors.Internal("JWT_SECRET is required", nil)
 	}
 
 	parsed, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if token.Method != jwt.SigningMethodHS256 {
-			return nil, errors.New("unexpected signing method")
+			return nil, svcerrors.Unauthorized("unexpected signing method")
 		}
 		return []byte(secret), nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, svcerrors.Unauthorized("invalid token")
 	}
 
 	claims, ok := parsed.Claims.(*Claims)
 	if !ok || !parsed.Valid {
-		return nil, errors.New("invalid token")
+		return nil, svcerrors.Unauthorized("invalid token")
 	}
 	return claims, nil
 }
@@ -77,7 +78,7 @@ func ValidateToken(tokenString string) (*Claims, error) {
 func ExtractBearerToken(header string) (string, error) {
 	parts := strings.SplitN(strings.TrimSpace(header), " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
-		return "", errors.New("invalid authorization header")
+		return "", svcerrors.Unauthorized("invalid authorization header")
 	}
 	return strings.TrimSpace(parts[1]), nil
 }

@@ -1,0 +1,19 @@
+schema:
+  - schema.graphql
+
+exec:
+  filename: generated.go
+  package: main
+
+model:
+  filename: models.go
+  package: main
+
+resolver:
+  layout: follow-schema
+  dir: .
+  package: main
+  filename_template: "{name}.resolvers.go"
+  type: Resolver
+
+omit_complexity: false

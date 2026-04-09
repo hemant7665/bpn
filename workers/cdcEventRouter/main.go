@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
+	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
 )
 
@@ -38,7 +39,7 @@ func initAWS(ctx context.Context) error {
 	}
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		return err
+		return svcerrors.Internal("failed to load AWS config", err)
 	}
 	if os.Getenv("ENVIRONMENT") == "local" && os.Getenv("AWS_ENDPOINT_URL") != "" {
 		cfg.BaseEndpoint = aws.String(os.Getenv("AWS_ENDPOINT_URL"))
@@ -51,7 +52,7 @@ func initAWS(ctx context.Context) error {
 	}
 	out, err := sqsClient.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{QueueName: aws.String(q)})
 	if err != nil {
-		return fmt.Errorf("get queue url %s: %w", q, err)
+		return svcerrors.Internal(fmt.Sprintf("get queue url %s", q), err)
 	}
 	usersQueueURL = *out.QueueUrl
 	return nil

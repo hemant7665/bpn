@@ -3,13 +3,15 @@ package cdcutil
 import (
 	"fmt"
 	"strings"
+
+	svcerrors "project-serverless/internal/errors"
 )
 
 // StringFromData returns a string form of a CDC/data map value (DMS JSON often uses numbers for ids).
 func StringFromData(data map[string]any, key string) (string, error) {
 	val, ok := data[key]
 	if !ok || val == nil {
-		return "", fmt.Errorf("missing required field %q", key)
+		return "", svcerrors.Validation(fmt.Sprintf("missing required field %q", key))
 	}
 	switch t := val.(type) {
 	case string:
@@ -24,7 +26,7 @@ func StringFromData(data map[string]any, key string) (string, error) {
 	default:
 		s := strings.TrimSpace(fmt.Sprint(t))
 		if s == "" {
-			return "", fmt.Errorf("field %q is empty", key)
+			return "", svcerrors.Validation(fmt.Sprintf("field %q is empty", key))
 		}
 		return s, nil
 	}

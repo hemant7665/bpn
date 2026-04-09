@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 )
 
 type listUsersUserServiceMock struct {
@@ -98,7 +98,7 @@ func TestHandleRequest_ClampsPageSize(t *testing.T) {
 }
 
 func TestHandleRequest_ServiceError(t *testing.T) {
-	mock := &listUsersUserServiceMock{err: errors.New("db error")}
+	mock := &listUsersUserServiceMock{err: svcerrors.Internal("db error", nil)}
 	deps.userService = mock
 
 	_, err := HandleRequest(context.Background(), ListUsersRequest{Skip: 0, Limit: 10, Authorization: mustAuthHeader(t)})

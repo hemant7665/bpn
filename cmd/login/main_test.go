@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -31,7 +30,7 @@ func (m loginServiceMock) GetUserByEmail(ctx context.Context, email string) (*do
 	if m.getByEmailFn != nil {
 		return m.getByEmailFn(ctx, email)
 	}
-	return nil, errors.New("not found")
+	return nil, svcerrors.NotFound("not found")
 }
 func TestHandleRequest_LoginSuccess(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-login")
@@ -87,7 +86,7 @@ func TestHandleRequest_ValidationError(t *testing.T) {
 func TestHandleRequest_InvalidCredentials_UserNotFound(t *testing.T) {
 	deps.userService = loginServiceMock{
 		getByEmailFn: func(context.Context, string) (*domain.User, error) {
-			return nil, errors.New("db: no rows")
+			return nil, svcerrors.NotFound("db: no rows")
 		},
 	}
 	_, err := HandleRequest(context.Background(), LoginRequest{

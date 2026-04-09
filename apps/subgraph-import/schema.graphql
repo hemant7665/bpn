@@ -1,0 +1,59 @@
+type Query {
+  getImportJob(jobId: ID!): ImportJob
+  listImportJobs(skip: Int, limit: Int, status: ImportJobStatus, createdAtOrder: ImportJobCreatedAtOrder): ImportJobListPayload!
+  getImportReportUrl(jobId: ID!): PresignedReportUrl!
+}
+
+type Mutation {
+  getImportUploadUrl: ImportUploadUrlPayload!
+  startImport(jobId: ID!): StartImportPayload!
+}
+
+enum ImportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ImportJobCreatedAtOrder {
+  ASC
+  DESC
+}
+
+type ImportJob {
+  id: ID!
+  tenantId: String!
+  requestedBy: Int!
+  status: ImportJobStatus!
+  csvS3Key: String!
+  reportS3Key: String
+  totalRows: Int
+  passedRows: Int
+  failedRows: Int
+  errorMessage: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type ImportUploadUrlPayload {
+  url: String!
+  jobId: ID!
+  csvS3Key: String!
+  expiresInSeconds: Int!
+}
+
+type PresignedReportUrl {
+  url: String!
+  expiresInSeconds: Int!
+}
+
+type ImportJobListPayload {
+  items: [ImportJob!]!
+  total: Int!
+}
+
+type StartImportPayload {
+  jobId: ID!
+  status: ImportJobStatus!
+}

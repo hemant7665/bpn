@@ -7,7 +7,7 @@ import (
 )
 
 // UserService is the application service for user operations (used by command and query Lambdas).
-// Commands: cmd/createUser, updateUser, deleteUser. Queries: query/getUser, listUsers, login (JWT).
+// Commands: cmd/createUser, updateUser, deleteUser, login (JWT). Queries: query/getUser, listUsers.
 // The GraphQL subgraph lives under apps/subgraph-user (orchestrator invokes Lambdas), BluePrint-style.
 type UserService interface {
 	CreateUser(ctx context.Context, user *domain.User) error

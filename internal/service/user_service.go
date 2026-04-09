@@ -5,14 +5,11 @@ import (
 	"errors"
 
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/repository"
 
 	"gorm.io/gorm"
 )
-
-// ErrEmailAlreadyExists is returned when CreateUser finds an existing row for the same tenant and email.
-// It avoids issuing INSERT (and burning SERIAL values) when the unique constraint would fail.
-var ErrEmailAlreadyExists = errors.New("user with this email already exists for this tenant")
 
 type userServiceImpl struct {
 	repo repository.UserRepository
@@ -25,7 +22,7 @@ func NewUserService(repo repository.UserRepository) UserService {
 func (s *userServiceImpl) CreateUser(ctx context.Context, user *domain.User) error {
 	_, err := s.repo.GetUserByEmail(ctx, user.TenantID, user.Email)
 	if err == nil {
-		return ErrEmailAlreadyExists
+		return svcerrors.ErrEmailAlreadyExists
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err

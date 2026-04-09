@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
+	svcerrors "project-serverless/internal/errors"
 )
 
 type userServiceMock struct {
@@ -69,7 +69,7 @@ func TestHandleRequest_ReturnsValidationForMissingID(t *testing.T) {
 }
 
 func TestHandleRequest_ReturnsNotFound(t *testing.T) {
-	deps.userService = userServiceMock{err: errors.New("not found")}
+	deps.userService = userServiceMock{err: svcerrors.NotFound("not found")}
 	_, err := HandleRequest(context.Background(), GetUserRequest{ID: 9.0, Authorization: mustAuthHeader(t)})
 	if err == nil {
 		t.Fatal("expected not found error")
