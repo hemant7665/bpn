@@ -1,5 +1,5 @@
 -- Single baseline: write_model.users + read_model.users_summary (materialized view).
--- If you previously applied older 000002–000004 files, reset the DB or fix schema_migrations before re-running.
+-- If you previously applied older 000002–000003 files, reset the DB or fix schema_migrations before re-running.
 
 CREATE SCHEMA IF NOT EXISTS write_model;
 CREATE SCHEMA IF NOT EXISTS read_model;

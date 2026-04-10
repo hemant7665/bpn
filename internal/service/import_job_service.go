@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/google/uuid"
@@ -21,15 +20,6 @@ import (
 	"project-serverless/internal/s3import"
 	"project-serverless/modules/csvimport"
 )
-
-// loadImportAWSConfig loads the default AWS SDK config used by import S3/SQS paths.
-func loadImportAWSConfig(ctx context.Context) (aws.Config, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return aws.Config{}, svcerrors.ImportInternal("aws config", err)
-	}
-	return cfg, nil
-}
 
 // importS3BucketName returns IMPORT_S3_BUCKET trimmed (may be empty).
 func importS3BucketName() string {
@@ -63,30 +53,33 @@ func markFailedAWSConfig(ctx context.Context, repo repository.ImportJobRepositor
 
 type importJobServiceImpl struct {
 	repo repository.ImportJobRepository
+	aws  *ImportJobAWS
 }
 
-// NewImportJobService builds the import application service (Lambda handlers should depend on this, not the repository).
-func NewImportJobService(repo repository.ImportJobRepository) ImportJobService {
-	return &importJobServiceImpl{repo: repo}
+// NewImportJobService builds the import application service. Pass aws from NewImportJobAWSFromDefaultConfig in production; nil aws is allowed for tests that only exercise DB-only paths.
+func NewImportJobService(repo repository.ImportJobRepository, aws *ImportJobAWS) ImportJobService {
+	return &importJobServiceImpl{repo: repo, aws: aws}
 }
 
-// s3OptionsForEnv returns path-style addressing for LocalStack. Virtual-hosted presigned URLs
-// can make LocalStack treat the first key segment as the bucket ("imports"), breaking PUT/GET from the host.
-func s3OptionsForEnv() []func(*s3.Options) {
-	if !s3UsePathStyleForRuntime() {
-		return nil
+func (s *importJobServiceImpl) requireS3Presign() (s3import.S3PresignAPI, error) {
+	if s.aws == nil || s.aws.S3Presign == nil {
+		return nil, svcerrors.ImportInternal("import S3 presigner not configured", nil)
 	}
-	return []func(*s3.Options){
-		func(o *s3.Options) { o.UsePathStyle = true },
-	}
+	return s.aws.S3Presign, nil
 }
 
-func s3UsePathStyleForRuntime() bool {
-	if os.Getenv("ENVIRONMENT") == "local" {
-		return true
+func (s *importJobServiceImpl) requireS3Object() (s3import.S3ObjectAPI, error) {
+	if s.aws == nil || s.aws.S3Object == nil {
+		return nil, svcerrors.ImportInternal("import S3 API client not configured", nil)
 	}
-	u := strings.ToLower(strings.TrimSpace(os.Getenv("AWS_ENDPOINT_URL")))
-	return strings.Contains(u, "localstack") || strings.Contains(u, "localhost:4566") || strings.Contains(u, "127.0.0.1:4566")
+	return s.aws.S3Object, nil
+}
+
+func (s *importJobServiceImpl) requireSQS() (ImportSQSAPI, error) {
+	if s.aws == nil || s.aws.SQS == nil {
+		return nil, svcerrors.ImportInternal("import SQS client not configured", nil)
+	}
+	return s.aws.SQS, nil
 }
 
 func (s *importJobServiceImpl) CreatePendingJobWithPresignedPut(ctx context.Context, tenantID string, userID int) (*ImportUploadURLResult, error) {
@@ -108,11 +101,10 @@ func (s *importJobServiceImpl) CreatePendingJobWithPresignedPut(ctx context.Cont
 		return nil, svcerrors.ImportInternal("failed to create import job", err)
 	}
 
-	awsCfg, err := loadImportAWSConfig(ctx)
+	presigner, err := s.requireS3Presign()
 	if err != nil {
 		return nil, err
 	}
-	presigner := s3.NewPresignClient(s3.NewFromConfig(awsCfg, s3OptionsForEnv()...))
 	expiry := 15 * time.Minute
 	urlStr, expSec, err := s3import.PresignPut(ctx, presigner, bucket, csvKey, expiry)
 	if err != nil {
@@ -121,7 +113,6 @@ func (s *importJobServiceImpl) CreatePendingJobWithPresignedPut(ctx context.Cont
 	return &ImportUploadURLResult{
 		URL:              urlStr,
 		JobID:            jobID.String(),
-		CsvS3Key:         csvKey,
 		ExpiresInSeconds: expSec,
 	}, nil
 }
@@ -140,11 +131,10 @@ func (s *importJobServiceImpl) StartImport(ctx context.Context, tenantID string,
 		return nil, err
 	}
 
-	awsCfg, err := loadImportAWSConfig(ctx)
+	s3c, err := s.requireS3Object()
 	if err != nil {
 		return nil, err
 	}
-	s3c := s3.NewFromConfig(awsCfg, s3OptionsForEnv()...)
 	if err := s3import.HeadObjectExists(ctx, s3c, bucket, job.CsvS3Key); err != nil {
 		return nil, svcerrors.ImportS3Missing("csv file not found in storage; upload before startImport")
 	}
@@ -154,8 +144,11 @@ func (s *importJobServiceImpl) StartImport(ctx context.Context, tenantID string,
 		return nil, svcerrors.ImportInternal("IMPORT_QUEUE_URL is not set", nil)
 	}
 
+	sqsClient, err := s.requireSQS()
+	if err != nil {
+		return nil, err
+	}
 	body, _ := json.Marshal(map[string]string{"job_id": jobID.String()})
-	sqsClient := sqs.NewFromConfig(awsCfg)
 	_, err = sqsClient.SendMessage(ctx, &sqs.SendMessageInput{
 		QueueUrl:    aws.String(queueURL),
 		MessageBody: aws.String(string(body)),
@@ -163,7 +156,10 @@ func (s *importJobServiceImpl) StartImport(ctx context.Context, tenantID string,
 	if err != nil {
 		return nil, svcerrors.ImportQueue("failed to enqueue import job", err)
 	}
-	return &ImportStartResult{JobID: jobID.String(), Status: job.Status}, nil
+	if err := s.repo.MarkAccepted(ctx, jobID); err != nil {
+		return nil, svcerrors.ImportInternal("failed to mark import job accepted", err)
+	}
+	return &ImportStartResult{JobID: jobID.String(), Status: domain.ImportStatusAccepted}, nil
 }
 
 func (s *importJobServiceImpl) GetJobForTenant(ctx context.Context, tenantID string, jobID uuid.UUID) (*domain.ImportJob, error) {
@@ -179,7 +175,7 @@ func (s *importJobServiceImpl) ListJobsForTenant(ctx context.Context, tenantID s
 		skip = 0
 	}
 	if limit <= 0 {
-		limit = 0
+		limit = 20
 	}
 	if limit > 100 {
 		limit = 100
@@ -209,11 +205,10 @@ func (s *importJobServiceImpl) PresignReportGetURL(ctx context.Context, tenantID
 		return nil, err
 	}
 
-	awsCfg, err := loadImportAWSConfig(ctx)
+	presigner, err := s.requireS3Presign()
 	if err != nil {
 		return nil, err
 	}
-	presigner := s3.NewPresignClient(s3.NewFromConfig(awsCfg, s3OptionsForEnv()...))
 	expiry := 900 * time.Second
 	urlStr, expSec, err := s3import.PresignGet(ctx, presigner, bucket, strings.TrimSpace(*job.ReportS3Key), expiry)
 	if err != nil {
@@ -250,12 +245,11 @@ func (s *importJobServiceImpl) ProcessImportJob(ctx context.Context, jobID uuid.
 		return nil
 	}
 
-	awsCfg, err := loadImportAWSConfig(ctx)
+	s3c, err := s.requireS3Object()
 	if err != nil {
 		markFailedAWSConfig(ctx, s.repo, jobID, err)
 		return nil
 	}
-	s3c := s3.NewFromConfig(awsCfg, s3OptionsForEnv()...)
 
 	out, err := s3c.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),

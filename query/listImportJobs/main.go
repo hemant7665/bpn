@@ -5,8 +5,10 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/google/uuid"
 
 	"project-serverless/internal/auth"
 	"project-serverless/internal/bootstrap"
@@ -24,9 +26,44 @@ type request struct {
 	CreatedAtOrder string `json:"created_at_order"`
 }
 
+// importJobListItem is the listImportJobs Lambda payload: same fields as domain.ImportJob
+// but without csv_s3_key / report_s3_key so paginated responses do not expose object paths.
+type importJobListItem struct {
+	ID           uuid.UUID `json:"id"`
+	TenantID     string    `json:"tenant_id"`
+	RequestedBy  int       `json:"requested_by"`
+	Status       string    `json:"status"`
+	TotalRows    *int      `json:"total_rows,omitempty"`
+	PassedRows   *int      `json:"passed_rows,omitempty"`
+	FailedRows   *int      `json:"failed_rows,omitempty"`
+	ErrorMessage *string   `json:"error_message,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type response struct {
-	Items []domain.ImportJob `json:"items"`
-	Total int64              `json:"total"`
+	Items []importJobListItem `json:"items"`
+	Total int64               `json:"total"`
+}
+
+func toImportJobListItems(jobs []domain.ImportJob) []importJobListItem {
+	out := make([]importJobListItem, len(jobs))
+	for i := range jobs {
+		j := jobs[i]
+		out[i] = importJobListItem{
+			ID:           j.ID,
+			TenantID:     j.TenantID,
+			RequestedBy:  j.RequestedBy,
+			Status:       j.Status,
+			TotalRows:    j.TotalRows,
+			PassedRows:   j.PassedRows,
+			FailedRows:   j.FailedRows,
+			ErrorMessage: j.ErrorMessage,
+			CreatedAt:    j.CreatedAt,
+			UpdatedAt:    j.UpdatedAt,
+		}
+	}
+	return out
 }
 
 var (
@@ -65,7 +102,7 @@ func HandleRequest(ctx context.Context, req request) (*response, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &response{Items: items, Total: total}, nil
+	return &response{Items: toImportJobListItems(items), Total: total}, nil
 }
 
 func main() {

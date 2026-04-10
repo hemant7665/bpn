@@ -55,8 +55,20 @@ type ComplexityRoot struct {
 		Total func(childComplexity int) int
 	}
 
+	ImportJobSummary struct {
+		CreatedAt    func(childComplexity int) int
+		ErrorMessage func(childComplexity int) int
+		FailedRows   func(childComplexity int) int
+		ID           func(childComplexity int) int
+		PassedRows   func(childComplexity int) int
+		RequestedBy  func(childComplexity int) int
+		Status       func(childComplexity int) int
+		TenantID     func(childComplexity int) int
+		TotalRows    func(childComplexity int) int
+		UpdatedAt    func(childComplexity int) int
+	}
+
 	ImportUploadUrlPayload struct {
-		CSVS3Key         func(childComplexity int) int
 		ExpiresInSeconds func(childComplexity int) int
 		JobID            func(childComplexity int) int
 		URL              func(childComplexity int) int
@@ -194,12 +206,67 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.ImportJobListPayload.Total(childComplexity), true
 
-	case "ImportUploadUrlPayload.csvS3Key":
-		if e.ComplexityRoot.ImportUploadUrlPayload.CSVS3Key == nil {
+	case "ImportJobSummary.createdAt":
+		if e.ComplexityRoot.ImportJobSummary.CreatedAt == nil {
 			break
 		}
 
-		return e.ComplexityRoot.ImportUploadUrlPayload.CSVS3Key(childComplexity), true
+		return e.ComplexityRoot.ImportJobSummary.CreatedAt(childComplexity), true
+	case "ImportJobSummary.errorMessage":
+		if e.ComplexityRoot.ImportJobSummary.ErrorMessage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.ErrorMessage(childComplexity), true
+	case "ImportJobSummary.failedRows":
+		if e.ComplexityRoot.ImportJobSummary.FailedRows == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.FailedRows(childComplexity), true
+	case "ImportJobSummary.id":
+		if e.ComplexityRoot.ImportJobSummary.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.ID(childComplexity), true
+	case "ImportJobSummary.passedRows":
+		if e.ComplexityRoot.ImportJobSummary.PassedRows == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.PassedRows(childComplexity), true
+	case "ImportJobSummary.requestedBy":
+		if e.ComplexityRoot.ImportJobSummary.RequestedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.RequestedBy(childComplexity), true
+	case "ImportJobSummary.status":
+		if e.ComplexityRoot.ImportJobSummary.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.Status(childComplexity), true
+	case "ImportJobSummary.tenantId":
+		if e.ComplexityRoot.ImportJobSummary.TenantID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.TenantID(childComplexity), true
+	case "ImportJobSummary.totalRows":
+		if e.ComplexityRoot.ImportJobSummary.TotalRows == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.TotalRows(childComplexity), true
+	case "ImportJobSummary.updatedAt":
+		if e.ComplexityRoot.ImportJobSummary.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImportJobSummary.UpdatedAt(childComplexity), true
+
 	case "ImportUploadUrlPayload.expiresInSeconds":
 		if e.ComplexityRoot.ImportUploadUrlPayload.ExpiresInSeconds == nil {
 			break
@@ -879,7 +946,7 @@ func (ec *executionContext) _ImportJobListPayload_items(ctx context.Context, fie
 			return obj.Items, nil
 		},
 		nil,
-		ec.marshalNImportJob2ᚕᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobᚄ,
+		ec.marshalNImportJobSummary2ᚕᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobSummaryᚄ,
 		true,
 		true,
 	)
@@ -894,31 +961,27 @@ func (ec *executionContext) fieldContext_ImportJobListPayload_items(_ context.Co
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_ImportJob_id(ctx, field)
+				return ec.fieldContext_ImportJobSummary_id(ctx, field)
 			case "tenantId":
-				return ec.fieldContext_ImportJob_tenantId(ctx, field)
+				return ec.fieldContext_ImportJobSummary_tenantId(ctx, field)
 			case "requestedBy":
-				return ec.fieldContext_ImportJob_requestedBy(ctx, field)
+				return ec.fieldContext_ImportJobSummary_requestedBy(ctx, field)
 			case "status":
-				return ec.fieldContext_ImportJob_status(ctx, field)
-			case "csvS3Key":
-				return ec.fieldContext_ImportJob_csvS3Key(ctx, field)
-			case "reportS3Key":
-				return ec.fieldContext_ImportJob_reportS3Key(ctx, field)
+				return ec.fieldContext_ImportJobSummary_status(ctx, field)
 			case "totalRows":
-				return ec.fieldContext_ImportJob_totalRows(ctx, field)
+				return ec.fieldContext_ImportJobSummary_totalRows(ctx, field)
 			case "passedRows":
-				return ec.fieldContext_ImportJob_passedRows(ctx, field)
+				return ec.fieldContext_ImportJobSummary_passedRows(ctx, field)
 			case "failedRows":
-				return ec.fieldContext_ImportJob_failedRows(ctx, field)
+				return ec.fieldContext_ImportJobSummary_failedRows(ctx, field)
 			case "errorMessage":
-				return ec.fieldContext_ImportJob_errorMessage(ctx, field)
+				return ec.fieldContext_ImportJobSummary_errorMessage(ctx, field)
 			case "createdAt":
-				return ec.fieldContext_ImportJob_createdAt(ctx, field)
+				return ec.fieldContext_ImportJobSummary_createdAt(ctx, field)
 			case "updatedAt":
-				return ec.fieldContext_ImportJob_updatedAt(ctx, field)
+				return ec.fieldContext_ImportJobSummary_updatedAt(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type ImportJob", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type ImportJobSummary", field.Name)
 		},
 	}
 	return fc, nil
@@ -948,6 +1011,296 @@ func (ec *executionContext) fieldContext_ImportJobListPayload_total(_ context.Co
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_id(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_tenantId(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_tenantId,
+		func(ctx context.Context) (any, error) {
+			return obj.TenantID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_tenantId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_requestedBy(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_requestedBy,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedBy, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_requestedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_status(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNImportJobStatus2projectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ImportJobStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_totalRows(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_totalRows,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalRows, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_totalRows(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_passedRows(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_passedRows,
+		func(ctx context.Context) (any, error) {
+			return obj.PassedRows, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_passedRows(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_failedRows(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_failedRows,
+		func(ctx context.Context) (any, error) {
+			return obj.FailedRows, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_failedRows(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_errorMessage(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_errorMessage,
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_createdAt(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportJobSummary_updatedAt(ctx context.Context, field graphql.CollectedField, obj *ImportJobSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportJobSummary_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportJobSummary_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportJobSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -1011,35 +1364,6 @@ func (ec *executionContext) fieldContext_ImportUploadUrlPayload_jobId(_ context.
 	return fc, nil
 }
 
-func (ec *executionContext) _ImportUploadUrlPayload_csvS3Key(ctx context.Context, field graphql.CollectedField, obj *ImportUploadURLPayload) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_ImportUploadUrlPayload_csvS3Key,
-		func(ctx context.Context) (any, error) {
-			return obj.CSVS3Key, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_ImportUploadUrlPayload_csvS3Key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ImportUploadUrlPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _ImportUploadUrlPayload_expiresInSeconds(ctx context.Context, field graphql.CollectedField, obj *ImportUploadURLPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1097,8 +1421,6 @@ func (ec *executionContext) fieldContext_Mutation_getImportUploadUrl(_ context.C
 				return ec.fieldContext_ImportUploadUrlPayload_url(ctx, field)
 			case "jobId":
 				return ec.fieldContext_ImportUploadUrlPayload_jobId(ctx, field)
-			case "csvS3Key":
-				return ec.fieldContext_ImportUploadUrlPayload_csvS3Key(ctx, field)
 			case "expiresInSeconds":
 				return ec.fieldContext_ImportUploadUrlPayload_expiresInSeconds(ctx, field)
 			}
@@ -3117,6 +3439,78 @@ func (ec *executionContext) _ImportJobListPayload(ctx context.Context, sel ast.S
 	return out
 }
 
+var importJobSummaryImplementors = []string{"ImportJobSummary"}
+
+func (ec *executionContext) _ImportJobSummary(ctx context.Context, sel ast.SelectionSet, obj *ImportJobSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, importJobSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ImportJobSummary")
+		case "id":
+			out.Values[i] = ec._ImportJobSummary_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tenantId":
+			out.Values[i] = ec._ImportJobSummary_tenantId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedBy":
+			out.Values[i] = ec._ImportJobSummary_requestedBy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._ImportJobSummary_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalRows":
+			out.Values[i] = ec._ImportJobSummary_totalRows(ctx, field, obj)
+		case "passedRows":
+			out.Values[i] = ec._ImportJobSummary_passedRows(ctx, field, obj)
+		case "failedRows":
+			out.Values[i] = ec._ImportJobSummary_failedRows(ctx, field, obj)
+		case "errorMessage":
+			out.Values[i] = ec._ImportJobSummary_errorMessage(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._ImportJobSummary_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._ImportJobSummary_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var importUploadUrlPayloadImplementors = []string{"ImportUploadUrlPayload"}
 
 func (ec *executionContext) _ImportUploadUrlPayload(ctx context.Context, sel ast.SelectionSet, obj *ImportUploadURLPayload) graphql.Marshaler {
@@ -3135,11 +3529,6 @@ func (ec *executionContext) _ImportUploadUrlPayload(ctx context.Context, sel ast
 			}
 		case "jobId":
 			out.Values[i] = ec._ImportUploadUrlPayload_jobId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "csvS3Key":
-			out.Values[i] = ec._ImportUploadUrlPayload_csvS3Key(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -3795,32 +4184,6 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
-func (ec *executionContext) marshalNImportJob2ᚕᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobᚄ(ctx context.Context, sel ast.SelectionSet, v []*ImportJob) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNImportJob2ᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJob(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNImportJob2ᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJob(ctx context.Context, sel ast.SelectionSet, v *ImportJob) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._ImportJob(ctx, sel, v)
-}
-
 func (ec *executionContext) marshalNImportJobListPayload2projectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobListPayload(ctx context.Context, sel ast.SelectionSet, v ImportJobListPayload) graphql.Marshaler {
 	return ec._ImportJobListPayload(ctx, sel, &v)
 }
@@ -3843,6 +4206,32 @@ func (ec *executionContext) unmarshalNImportJobStatus2projectᚑserverlessᚋapp
 
 func (ec *executionContext) marshalNImportJobStatus2projectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobStatus(ctx context.Context, sel ast.SelectionSet, v ImportJobStatus) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNImportJobSummary2ᚕᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobSummaryᚄ(ctx context.Context, sel ast.SelectionSet, v []*ImportJobSummary) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNImportJobSummary2ᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobSummary(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNImportJobSummary2ᚖprojectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportJobSummary(ctx context.Context, sel ast.SelectionSet, v *ImportJobSummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ImportJobSummary(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNImportUploadUrlPayload2projectᚑserverlessᚋappsᚋsubgraphᚑimportᚐImportUploadURLPayload(ctx context.Context, sel ast.SelectionSet, v ImportUploadURLPayload) graphql.Marshaler {

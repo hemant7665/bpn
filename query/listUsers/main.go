@@ -13,11 +13,13 @@ import (
 	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
+	"project-serverless/internal/repository"
 	"project-serverless/internal/service"
 )
 
 type Dependencies struct {
 	userService service.UserService
+	userRepo    repository.UserRepository
 }
 
 var deps Dependencies
@@ -41,17 +43,19 @@ type ListUsersResponse struct {
 }
 
 func setupDependencies() error {
-	svc, err := bootstrap.SetupUserService()
+	repo, err := bootstrap.SetupUserRepository()
 	if err != nil {
 		return svcerrors.Internal("database connection failed", err)
 	}
-	deps.userService = svc
+	deps.userRepo = repo
+	deps.userService = service.NewUserService(repo)
 	return nil
 }
 
 func HandleRequest(ctx context.Context, req ListUsersRequest) (*ListUsersResponse, error) {
-	if _, err := auth.AuthorizeHeader(req.Authorization); err != nil {
-		return nil, svcerrors.Unauthorized("unauthorized")
+	tenantID, _, err := auth.ResolveTenant(ctx, req.Authorization, deps.userRepo)
+	if err != nil {
+		return nil, err
 	}
 
 	limit := req.Limit
@@ -78,7 +82,7 @@ func HandleRequest(ctx context.Context, req ListUsersRequest) (*ListUsersRespons
 		filter.Email = &e
 	}
 
-	items, total, err := deps.userService.ListUsersFiltered(ctx, req.Skip, limit, filter)
+	items, total, err := deps.userService.ListUsersFiltered(ctx, tenantID, req.Skip, limit, filter)
 	if err != nil {
 		return nil, svcerrors.Internal("list users failed", err)
 	}

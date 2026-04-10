@@ -1,9 +1,9 @@
-
+-- Status ACCEPTED: set after startImport enqueues to SQS (before worker claims the job).
 CREATE TABLE IF NOT EXISTS write_model.import_jobs (
     id UUID PRIMARY KEY,
     tenant_id TEXT NOT NULL,
     requested_by INTEGER NOT NULL REFERENCES write_model.users (id),
-    status TEXT NOT NULL CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')),
+    status TEXT NOT NULL CHECK (status IN ('PENDING', 'ACCEPTED', 'PROCESSING', 'COMPLETED', 'FAILED')),
     csv_s3_key TEXT NOT NULL,
     report_s3_key TEXT,
     total_rows INTEGER,

@@ -14,6 +14,7 @@ import (
 	"project-serverless/internal/events"
 	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
+	"project-serverless/internal/repository"
 	"project-serverless/internal/service"
 	"project-serverless/internal/validator"
 )
@@ -32,18 +33,21 @@ type domainEventPublisher interface {
 }
 
 type dependencies struct {
-	userService       service.UserService
-	auditEmitter      auditPublisher
-	domainPublisher   domainEventPublisher
+	userService     service.UserService
+	userRepo        repository.UserRepository
+	auditEmitter    auditPublisher
+	domainPublisher domainEventPublisher
 }
 
 var deps dependencies
 
 func setupDependencies() error {
-	svc, err := bootstrap.SetupUserService()
+	repo, err := bootstrap.SetupUserRepository()
 	if err != nil {
 		return svcerrors.Internal("database connection failed", err)
 	}
+	deps.userRepo = repo
+	deps.userService = service.NewUserService(repo)
 	auditEmitter, err := events.NewAuditEmitter(context.Background())
 	if err != nil {
 		return err
@@ -52,7 +56,6 @@ func setupDependencies() error {
 	if err != nil {
 		return err
 	}
-	deps.userService = svc
 	deps.auditEmitter = auditEmitter
 	deps.domainPublisher = domainPub
 	return nil
@@ -62,12 +65,16 @@ func HandleRequest(ctx context.Context, req DeleteUserRequest) (*domain.User, er
 	if err := validator.ValidateStruct(req); err != nil {
 		return nil, svcerrors.Validation("id and authorization are required")
 	}
-	if _, err := auth.AuthorizeHeader(req.Authorization); err != nil {
-		return nil, svcerrors.Unauthorized("unauthorized")
+	tenantID, _, err := auth.ResolveTenant(ctx, req.Authorization, deps.userRepo)
+	if err != nil {
+		return nil, err
 	}
 
 	existing, err := deps.userService.GetWriteUserByID(ctx, req.ID)
 	if err != nil {
+		return nil, svcerrors.NotFound("user not found")
+	}
+	if domain.NormalizeTenantID(existing.TenantID) != domain.NormalizeTenantID(tenantID) {
 		return nil, svcerrors.NotFound("user not found")
 	}
 

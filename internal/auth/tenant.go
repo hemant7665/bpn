@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/repository"
 )
@@ -21,9 +22,5 @@ func ResolveTenant(ctx context.Context, authorization string, users repository.U
 	if err != nil {
 		return "", 0, svcerrors.NotFound("user not found")
 	}
-	tid := strings.TrimSpace(u.TenantID)
-	if tid == "" {
-		tid = "default-tenant"
-	}
-	return tid, u.ID, nil
+	return domain.NormalizeTenantID(u.TenantID), u.ID, nil
 }

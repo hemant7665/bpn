@@ -8,6 +8,9 @@ import (
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
+	"project-serverless/internal/helpers"
+
+	"gorm.io/gorm"
 )
 
 type deleteUserServiceMock struct {
@@ -29,10 +32,10 @@ func (m deleteUserServiceMock) DeleteUser(ctx context.Context, id int) error {
 	}
 	return nil
 }
-func (m deleteUserServiceMock) GetUser(context.Context, int) (*domain.UserSummary, error) {
+func (m deleteUserServiceMock) GetUser(context.Context, string, int) (*domain.UserSummary, error) {
 	return nil, nil
 }
-func (m deleteUserServiceMock) ListUsersFiltered(context.Context, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+func (m deleteUserServiceMock) ListUsersFiltered(context.Context, string, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
 	return nil, 0, nil
 }
 func (m deleteUserServiceMock) GetUserByEmail(context.Context, string) (*domain.User, error) {
@@ -62,7 +65,19 @@ func deleteAuthHeader(t *testing.T) string {
 	return "Bearer " + token
 }
 
+func jwtCallerRepo() *helpers.UserRepository {
+	return &helpers.UserRepository{
+		GetWriteUserByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			if id != 1 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			return &domain.User{ID: 1, TenantID: "default-tenant"}, nil
+		},
+	}
+}
+
 func TestHandleRequest_DeleteUserSuccess(t *testing.T) {
+	deps.userRepo = jwtCallerRepo()
 	existing := &domain.User{
 		ID:        5,
 		TenantID:  "default-tenant",
@@ -99,11 +114,45 @@ func TestHandleRequest_DeleteUserSuccess(t *testing.T) {
 }
 
 func TestHandleRequest_DeleteUserUnauthorized(t *testing.T) {
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = deleteUserServiceMock{}
 	deps.auditEmitter = delAudit{}
 	deps.domainPublisher = noopDomainPub{}
 	_, err := HandleRequest(context.Background(), DeleteUserRequest{ID: 1, Authorization: "bad"})
 	if err == nil {
 		t.Fatal("expected unauthorized error")
+	}
+}
+
+func TestHandleRequest_DeleteUserWrongTenantNotFound(t *testing.T) {
+	deps.userRepo = &helpers.UserRepository{
+		GetWriteUserByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			return &domain.User{ID: 1, TenantID: "tenant-a"}, nil
+		},
+	}
+	deps.userService = deleteUserServiceMock{
+		getByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			return &domain.User{
+				ID:        id,
+				TenantID:  "tenant-b",
+				Username:  "v",
+				Email:     "v@b.com",
+				CreatedAt: time.Now().UTC(),
+			}, nil
+		},
+	}
+	deps.auditEmitter = delAudit{}
+	deps.domainPublisher = noopDomainPub{}
+
+	_, err := HandleRequest(context.Background(), DeleteUserRequest{
+		ID:            42,
+		Authorization: deleteAuthHeader(t),
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	ae, ok := svcerrors.IsAppError(err)
+	if !ok || ae.Code != svcerrors.CodeNotFound {
+		t.Fatalf("expected not found, got %v", err)
 	}
 }

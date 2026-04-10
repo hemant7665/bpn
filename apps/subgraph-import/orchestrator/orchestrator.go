@@ -26,7 +26,6 @@ type Service interface {
 type UploadURLResult struct {
 	URL              string `json:"url"`
 	JobID            string `json:"job_id"`
-	CsvS3Key         string `json:"csv_s3_key"`
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
 }
 

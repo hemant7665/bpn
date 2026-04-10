@@ -44,13 +44,15 @@ func processMessage(ctx context.Context, body string) error {
 	return importSvc.ProcessImportJob(ctx, jobID)
 }
 
-func HandleRequest(ctx context.Context, ev events.SQSEvent) error {
+func HandleRequest(ctx context.Context, ev events.SQSEvent) (events.SQSEventResponse, error) {
+	var failures []events.SQSBatchItemFailure
 	for _, rec := range ev.Records {
 		if err := processMessage(ctx, rec.Body); err != nil {
-			return err
+			logger.Error("import_job_worker_record_failed", map[string]any{"error": err.Error(), "msg_id": rec.MessageId})
+			failures = append(failures, events.SQSBatchItemFailure{ItemIdentifier: rec.MessageId})
 		}
 	}
-	return nil
+	return events.SQSEventResponse{BatchItemFailures: failures}, nil
 }
 
 func main() {

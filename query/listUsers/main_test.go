@@ -7,9 +7,13 @@ import (
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
+	"project-serverless/internal/helpers"
+
+	"gorm.io/gorm"
 )
 
 type listUsersUserServiceMock struct {
+	lastTenant string
 	lastSkip   int
 	lastLimit  int
 	lastFilter domain.ListUsersFilter
@@ -24,10 +28,11 @@ func (m *listUsersUserServiceMock) GetWriteUserByID(context.Context, int) (*doma
 }
 func (m *listUsersUserServiceMock) UpdateUser(context.Context, *domain.User) error { return nil }
 func (m *listUsersUserServiceMock) DeleteUser(context.Context, int) error          { return nil }
-func (m *listUsersUserServiceMock) GetUser(context.Context, int) (*domain.UserSummary, error) {
+func (m *listUsersUserServiceMock) GetUser(context.Context, string, int) (*domain.UserSummary, error) {
 	return nil, nil
 }
-func (m *listUsersUserServiceMock) ListUsersFiltered(_ context.Context, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+func (m *listUsersUserServiceMock) ListUsersFiltered(_ context.Context, tenantID string, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+	m.lastTenant = tenantID
 	m.lastSkip = skip
 	m.lastLimit = limit
 	m.lastFilter = filter
@@ -46,21 +51,34 @@ func mustAuthHeader(t *testing.T) string {
 	return "Bearer " + token
 }
 
+func jwtCallerRepo() *helpers.UserRepository {
+	return &helpers.UserRepository{
+		GetWriteUserByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			if id != 1 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			return &domain.User{ID: 1, TenantID: "default-tenant"}, nil
+		},
+	}
+}
+
 func TestHandleRequest_UsesDefaults(t *testing.T) {
 	mock := &listUsersUserServiceMock{result: []domain.UserSummary{}, total: 0}
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = mock
 
 	_, err := HandleRequest(context.Background(), ListUsersRequest{Authorization: mustAuthHeader(t)})
 	if err != nil {
 		t.Fatalf("HandleRequest error: %v", err)
 	}
-	if mock.lastLimit != defaultLimit || mock.lastSkip != 0 {
-		t.Fatalf("unexpected pagination args: limit=%d skip=%d", mock.lastLimit, mock.lastSkip)
+	if mock.lastTenant != "default-tenant" || mock.lastLimit != defaultLimit || mock.lastSkip != 0 {
+		t.Fatalf("unexpected tenant/pagination: tenant=%q limit=%d skip=%d", mock.lastTenant, mock.lastLimit, mock.lastSkip)
 	}
 }
 
 func TestHandleRequest_UsesProvidedPagination(t *testing.T) {
 	mock := &listUsersUserServiceMock{result: []domain.UserSummary{}, total: 0}
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = mock
 
 	skip := 20
@@ -76,6 +94,7 @@ func TestHandleRequest_UsesProvidedPagination(t *testing.T) {
 
 func TestHandleRequest_RejectsNegativeSkip(t *testing.T) {
 	mock := &listUsersUserServiceMock{result: []domain.UserSummary{}}
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = mock
 
 	_, err := HandleRequest(context.Background(), ListUsersRequest{Skip: -1, Limit: 10, Authorization: mustAuthHeader(t)})
@@ -86,6 +105,7 @@ func TestHandleRequest_RejectsNegativeSkip(t *testing.T) {
 
 func TestHandleRequest_ClampsPageSize(t *testing.T) {
 	mock := &listUsersUserServiceMock{result: []domain.UserSummary{}, total: 0}
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = mock
 
 	_, err := HandleRequest(context.Background(), ListUsersRequest{Skip: 0, Limit: 999, Authorization: mustAuthHeader(t)})
@@ -99,6 +119,7 @@ func TestHandleRequest_ClampsPageSize(t *testing.T) {
 
 func TestHandleRequest_ServiceError(t *testing.T) {
 	mock := &listUsersUserServiceMock{err: svcerrors.Internal("db error", nil)}
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = mock
 
 	_, err := HandleRequest(context.Background(), ListUsersRequest{Skip: 0, Limit: 10, Authorization: mustAuthHeader(t)})

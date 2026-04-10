@@ -21,7 +21,6 @@ func (r *mutationResolver) GetImportUploadURL(ctx context.Context) (*ImportUploa
 	return &ImportUploadURLPayload{
 		URL:              out.URL,
 		JobID:            out.JobID,
-		CSVS3Key:         out.CsvS3Key,
 		ExpiresInSeconds: out.ExpiresInSeconds,
 	}, nil
 }
@@ -71,9 +70,9 @@ func (r *queryResolver) ListImportJobs(ctx context.Context, skip *int, limit *in
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*ImportJob, 0, len(items))
+	out := make([]*ImportJobSummary, 0, len(items))
 	for i := range items {
-		out = append(out, mapImportJob(&items[i]))
+		out = append(out, mapImportJobSummary(&items[i]))
 	}
 	t := int(total)
 	return &ImportJobListPayload{Items: out, Total: t}, nil
@@ -111,6 +110,24 @@ func mapImportJob(d *domain.ImportJob) *ImportJob {
 		Status:       ImportJobStatus(d.Status),
 		CSVS3Key:     d.CsvS3Key,
 		ReportS3Key:  d.ReportS3Key,
+		TotalRows:    d.TotalRows,
+		PassedRows:   d.PassedRows,
+		FailedRows:   d.FailedRows,
+		ErrorMessage: d.ErrorMessage,
+		CreatedAt:    d.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    d.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func mapImportJobSummary(d *domain.ImportJob) *ImportJobSummary {
+	if d == nil {
+		return nil
+	}
+	return &ImportJobSummary{
+		ID:           d.ID.String(),
+		TenantID:     d.TenantID,
+		RequestedBy:  d.RequestedBy,
+		Status:       ImportJobStatus(d.Status),
 		TotalRows:    d.TotalRows,
 		PassedRows:   d.PassedRows,
 		FailedRows:   d.FailedRows,

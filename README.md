@@ -30,6 +30,8 @@ Override names with env vars: `LAMBDA_CREATE_USER_NAME`, `LAMBDA_LOGIN_NAME`, `L
 | `getImportReportUrl` | `query/getImportReportUrl` | `query getImportReportUrl` |
 | `importJobWorker` | `workers/importJobWorker` | SQS `import-jobs` (not GraphQL) |
 
+The worker returns partial batch failures (`SQSEventResponse.batchItemFailures`) so only failed messages are retried. On AWS, turn on **Report batch item failures** on the Lambda’s SQS event source mapping (`FunctionResponseTypes` includes `ReportBatchItemFailures` in CloudFormation / `aws lambda create-event-source-mapping`, etc.). Without it, Lambda treats any response as full success.
+
 Same pattern: `LAMBDA_GET_IMPORT_UPLOAD_URL_NAME`, `LAMBDA_START_IMPORT_NAME`, etc., in `.env.example`.
 
 ### Other workers
@@ -156,7 +158,7 @@ Header: `Authorization: Bearer JWT_TOKEN_HERE`
 
 ```json
 {
-  "query": "mutation { getImportUploadUrl { url jobId csvS3Key expiresInSeconds } }"
+  "query": "mutation { getImportUploadUrl { url jobId expiresInSeconds } }"
 }
 ```
 
@@ -164,7 +166,7 @@ Header: `Authorization: Bearer JWT_TOKEN_HERE`
 curl --location 'http://localhost:4004/query' \
   --header 'Content-Type: application/json' \
   --header 'Authorization: Bearer JWT_TOKEN_HERE' \
-  --data '{"query":"mutation { getImportUploadUrl { url jobId csvS3Key expiresInSeconds } }"}'
+  --data '{"query":"mutation { getImportUploadUrl { url jobId expiresInSeconds } }"}'
 ```
 
 Keep `jobId` and presigned `url`.

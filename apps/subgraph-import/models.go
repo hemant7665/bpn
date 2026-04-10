@@ -25,14 +25,26 @@ type ImportJob struct {
 }
 
 type ImportJobListPayload struct {
-	Items []*ImportJob `json:"items"`
-	Total int          `json:"total"`
+	Items []*ImportJobSummary `json:"items"`
+	Total int                 `json:"total"`
+}
+
+type ImportJobSummary struct {
+	ID           string          `json:"id"`
+	TenantID     string          `json:"tenantId"`
+	RequestedBy  int             `json:"requestedBy"`
+	Status       ImportJobStatus `json:"status"`
+	TotalRows    *int            `json:"totalRows,omitempty"`
+	PassedRows   *int            `json:"passedRows,omitempty"`
+	FailedRows   *int            `json:"failedRows,omitempty"`
+	ErrorMessage *string         `json:"errorMessage,omitempty"`
+	CreatedAt    string          `json:"createdAt"`
+	UpdatedAt    string          `json:"updatedAt"`
 }
 
 type ImportUploadURLPayload struct {
 	URL              string `json:"url"`
 	JobID            string `json:"jobId"`
-	CSVS3Key         string `json:"csvS3Key"`
 	ExpiresInSeconds int    `json:"expiresInSeconds"`
 }
 
@@ -111,6 +123,7 @@ type ImportJobStatus string
 
 const (
 	ImportJobStatusPending    ImportJobStatus = "PENDING"
+	ImportJobStatusAccepted   ImportJobStatus = "ACCEPTED"
 	ImportJobStatusProcessing ImportJobStatus = "PROCESSING"
 	ImportJobStatusCompleted  ImportJobStatus = "COMPLETED"
 	ImportJobStatusFailed     ImportJobStatus = "FAILED"
@@ -118,6 +131,7 @@ const (
 
 var AllImportJobStatus = []ImportJobStatus{
 	ImportJobStatusPending,
+	ImportJobStatusAccepted,
 	ImportJobStatusProcessing,
 	ImportJobStatusCompleted,
 	ImportJobStatusFailed,
@@ -125,7 +139,7 @@ var AllImportJobStatus = []ImportJobStatus{
 
 func (e ImportJobStatus) IsValid() bool {
 	switch e {
-	case ImportJobStatusPending, ImportJobStatusProcessing, ImportJobStatusCompleted, ImportJobStatusFailed:
+	case ImportJobStatusPending, ImportJobStatusAccepted, ImportJobStatusProcessing, ImportJobStatusCompleted, ImportJobStatusFailed:
 		return true
 	}
 	return false

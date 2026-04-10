@@ -21,7 +21,6 @@ type request struct {
 type response struct {
 	URL              string `json:"url"`
 	JobID            string `json:"job_id"`
-	CsvS3Key         string `json:"csv_s3_key"`
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
 }
 
@@ -56,7 +55,6 @@ func HandleRequest(ctx context.Context, req request) (*response, error) {
 	return &response{
 		URL:              out.URL,
 		JobID:            out.JobID,
-		CsvS3Key:         out.CsvS3Key,
 		ExpiresInSeconds: out.ExpiresInSeconds,
 	}, nil
 }

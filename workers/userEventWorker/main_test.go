@@ -10,34 +10,8 @@ import (
 
 	"project-serverless/internal/domain"
 	appevents "project-serverless/internal/events"
-	"project-serverless/internal/repository"
+	"project-serverless/internal/helpers"
 )
-
-type userRepoMock struct {
-	refreshErr error
-	saveErr    error
-}
-
-func (m *userRepoMock) CreateUser(context.Context, *domain.User) error { return nil }
-func (m *userRepoMock) GetWriteUserByID(context.Context, int) (*domain.User, error) {
-	return nil, nil
-}
-func (m *userRepoMock) UpdateUser(context.Context, *domain.User) error            { return nil }
-func (m *userRepoMock) DeleteUser(context.Context, int) error                     { return nil }
-func (m *userRepoMock) GetUser(context.Context, int) (*domain.UserSummary, error) { return nil, nil }
-func (m *userRepoMock) GetUserByEmail(context.Context, string, string) (*domain.User, error) {
-	return nil, nil
-}
-func (m *userRepoMock) ListUsersFiltered(context.Context, int, int, domain.ListUsersFilter) ([]domain.UserSummary, error) {
-	return nil, nil
-}
-func (m *userRepoMock) CountUsersFiltered(context.Context, domain.ListUsersFilter) (int64, error) {
-	return 0, nil
-}
-func (m *userRepoMock) RefreshUsersSummaryView(context.Context) error         { return m.refreshErr }
-func (m *userRepoMock) SaveUserReadModel(context.Context, *domain.User) error { return m.saveErr }
-
-var _ repository.UserRepository = (*userRepoMock)(nil)
 
 func TestSchemaAllowsWriteModelUsers_emptyAndWriteModel(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "")
@@ -72,7 +46,7 @@ func TestCdcTableIsUsers(t *testing.T) {
 func TestProcessSQSEvent_invalidJSON(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	err := processSQSEvent(context.Background(), `{`)
 	if err == nil {
@@ -83,7 +57,7 @@ func TestProcessSQSEvent_invalidJSON(t *testing.T) {
 func TestProcessSQSEvent_userReadModelSync(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	body := `{"eventType":"` + appevents.UserReadModelSyncEventType + `"}`
 	if err := processSQSEvent(context.Background(), body); err != nil {
@@ -95,7 +69,9 @@ func TestProcessSQSEvent_userReadModelSync_refreshError(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
 	deps = dependencies{
-		UserRepository:  &userRepoMock{refreshErr: errTest},
+		UserRepository: &helpers.UserRepository{
+			RefreshUsersSummaryViewFn: func(context.Context) error { return errTest },
+		},
 		DomainPublisher: nil,
 	}
 
@@ -114,7 +90,7 @@ func (e *testError) Error() string { return "test error" }
 func TestProcessSQSEvent_userCreated(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	ev := appevents.UserCreatedEvent{
 		EventType:  appevents.UserCreatedEventType,
@@ -139,7 +115,9 @@ func TestProcessSQSEvent_userCreated(t *testing.T) {
 func TestProcessSQSEvent_userCreated_saveError(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{saveErr: errTest}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{
+		SaveUserReadModelFn: func(context.Context, *domain.User) error { return errTest },
+	}, DomainPublisher: nil}
 
 	ev := appevents.UserCreatedEvent{
 		EventType: appevents.UserCreatedEventType,
@@ -158,7 +136,7 @@ func TestProcessSQSEvent_userCreated_saveError(t *testing.T) {
 func TestProcessSQSEvent_userUpdated(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	ev := appevents.UserUpdatedEvent{
 		EventType: appevents.UserUpdatedEventType,
@@ -180,7 +158,7 @@ func TestProcessSQSEvent_userUpdated(t *testing.T) {
 func TestProcessSQSEvent_cdcSkipUnknownTable(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	body := `{"metadata":{"table-name":"orders","schema-name":"write_model"},"data":{"id":"1"}}`
 	if err := processSQSEvent(context.Background(), body); err != nil {
@@ -192,7 +170,7 @@ func TestProcessSQSEvent_cdcSkipWrongSchema(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "staging")
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	body := `{"metadata":{"table-name":"users","schema-name":"analytics"},"data":{"id":"1"}}`
 	if err := processSQSEvent(context.Background(), body); err != nil {
@@ -203,7 +181,7 @@ func TestProcessSQSEvent_cdcSkipWrongSchema(t *testing.T) {
 func TestProcessSQSEvent_cdcUsersWriteModel_refreshOnly(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	body := `{
 		"metadata": {"table-name": "users", "schema-name": "write_model", "operation": "insert"},
@@ -217,7 +195,7 @@ func TestProcessSQSEvent_cdcUsersWriteModel_refreshOnly(t *testing.T) {
 func TestHandleRequest_batchItemFailure(t *testing.T) {
 	old := deps
 	defer func() { deps = old }()
-	deps = dependencies{UserRepository: &userRepoMock{}, DomainPublisher: nil}
+	deps = dependencies{UserRepository: &helpers.UserRepository{}, DomainPublisher: nil}
 
 	ev := lambdaevents.SQSEvent{Records: []lambdaevents.SQSMessage{
 		{MessageId: "m-bad", Body: `{`},

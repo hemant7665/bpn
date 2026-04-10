@@ -1,6 +1,18 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// NormalizeTenantID trims whitespace and matches ResolveTenant / DB defaults when tenant is unset.
+func NormalizeTenantID(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return "default-tenant"
+	}
+	return t
+}
 
 // User is the write_model.users aggregate (CQRS command side).
 type User struct {

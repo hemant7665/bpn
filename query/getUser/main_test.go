@@ -8,6 +8,9 @@ import (
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
+	"project-serverless/internal/helpers"
+
+	"gorm.io/gorm"
 )
 
 type userServiceMock struct {
@@ -21,10 +24,10 @@ func (m userServiceMock) GetWriteUserByID(context.Context, int) (*domain.User, e
 }
 func (m userServiceMock) UpdateUser(context.Context, *domain.User) error { return nil }
 func (m userServiceMock) DeleteUser(context.Context, int) error          { return nil }
-func (m userServiceMock) GetUser(context.Context, int) (*domain.UserSummary, error) {
+func (m userServiceMock) GetUser(context.Context, string, int) (*domain.UserSummary, error) {
 	return m.user, m.err
 }
-func (m userServiceMock) ListUsersFiltered(context.Context, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+func (m userServiceMock) ListUsersFiltered(context.Context, string, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
 	return nil, 0, nil
 }
 func (m userServiceMock) GetUserByEmail(context.Context, string) (*domain.User, error) {
@@ -40,7 +43,19 @@ func mustAuthHeader(t *testing.T) string {
 	return "Bearer " + token
 }
 
+func jwtCallerRepo() *helpers.UserRepository {
+	return &helpers.UserRepository{
+		GetWriteUserByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			if id != 1 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			return &domain.User{ID: 1, TenantID: "default-tenant"}, nil
+		},
+	}
+}
+
 func TestHandleRequest_AcceptsStringID(t *testing.T) {
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = userServiceMock{
 		user: &domain.UserSummary{
 			ID:        5,
@@ -61,6 +76,7 @@ func TestHandleRequest_AcceptsStringID(t *testing.T) {
 }
 
 func TestHandleRequest_ReturnsValidationForMissingID(t *testing.T) {
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = userServiceMock{}
 	_, err := HandleRequest(context.Background(), GetUserRequest{Authorization: mustAuthHeader(t)})
 	if err == nil {
@@ -69,6 +85,7 @@ func TestHandleRequest_ReturnsValidationForMissingID(t *testing.T) {
 }
 
 func TestHandleRequest_ReturnsNotFound(t *testing.T) {
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = userServiceMock{err: svcerrors.NotFound("not found")}
 	_, err := HandleRequest(context.Background(), GetUserRequest{ID: 9.0, Authorization: mustAuthHeader(t)})
 	if err == nil {

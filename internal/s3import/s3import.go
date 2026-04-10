@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 
@@ -26,8 +27,21 @@ func ObjectKeys(tenantID string, jobID uuid.UUID) (csvKey, reportKey string) {
 		fmt.Sprintf("%s/%s/report.json", t, id)
 }
 
+// S3PresignAPI is the presign surface used by import flows (*s3.PresignClient implements it).
+type S3PresignAPI interface {
+	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+}
+
+// S3ObjectAPI is Head + Get + Put (*s3.Client implements it).
+type S3ObjectAPI interface {
+	S3HeadAPI
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+}
+
 // PresignPut returns a presigned PUT URL and its TTL in seconds.
-func PresignPut(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (url string, expiresSec int, err error) {
+func PresignPut(ctx context.Context, client S3PresignAPI, bucket, key string, expiry time.Duration) (url string, expiresSec int, err error) {
 	out, err := client.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
@@ -40,7 +54,7 @@ func PresignPut(ctx context.Context, client *s3.PresignClient, bucket, key strin
 }
 
 // PresignGet returns a presigned GET URL and its TTL in seconds.
-func PresignGet(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (url string, expiresSec int, err error) {
+func PresignGet(ctx context.Context, client S3PresignAPI, bucket, key string, expiry time.Duration) (url string, expiresSec int, err error) {
 	out, err := client.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),

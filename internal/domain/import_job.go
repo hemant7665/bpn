@@ -9,6 +9,7 @@ import (
 // Import job lifecycle statuses (must match DB CHECK on write_model.import_jobs.status).
 const (
 	ImportStatusPending    = "PENDING"
+	ImportStatusAccepted   = "ACCEPTED"
 	ImportStatusProcessing = "PROCESSING"
 	ImportStatusCompleted  = "COMPLETED"
 	ImportStatusFailed     = "FAILED"

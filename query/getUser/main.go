@@ -12,12 +12,14 @@ import (
 	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
 	"project-serverless/internal/logger"
+	"project-serverless/internal/repository"
 	"project-serverless/internal/service"
 	"project-serverless/internal/validator"
 )
 
 type Dependencies struct {
 	userService service.UserService
+	userRepo    repository.UserRepository
 }
 
 var deps Dependencies
@@ -28,23 +30,25 @@ type GetUserRequest struct {
 }
 
 func setupDependencies() error {
-	svc, err := bootstrap.SetupUserService()
+	repo, err := bootstrap.SetupUserRepository()
 	if err != nil {
 		return svcerrors.Internal("database connection failed", err)
 	}
-	deps.userService = svc
+	deps.userRepo = repo
+	deps.userService = service.NewUserService(repo)
 	return nil
 }
 
 func HandleRequest(ctx context.Context, req GetUserRequest) (*domain.UserSummary, error) {
-	if _, err := auth.AuthorizeHeader(req.Authorization); err != nil {
-		return nil, svcerrors.Unauthorized("unauthorized")
+	tenantID, _, err := auth.ResolveTenant(ctx, req.Authorization, deps.userRepo)
+	if err != nil {
+		return nil, err
 	}
 	idInt, err := validator.ParsePositiveIntID(req.ID)
 	if err != nil {
 		return nil, err
 	}
-	user, err := deps.userService.GetUser(ctx, idInt)
+	user, err := deps.userService.GetUser(ctx, tenantID, idInt)
 	if err != nil {
 		return nil, svcerrors.NotFound("user not found")
 	}

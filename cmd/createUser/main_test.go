@@ -23,10 +23,10 @@ func (m createUserServiceMock) GetWriteUserByID(context.Context, int) (*domain.U
 }
 func (m createUserServiceMock) UpdateUser(context.Context, *domain.User) error { return nil }
 func (m createUserServiceMock) DeleteUser(context.Context, int) error          { return nil }
-func (m createUserServiceMock) GetUser(context.Context, int) (*domain.UserSummary, error) {
+func (m createUserServiceMock) GetUser(context.Context, string, int) (*domain.UserSummary, error) {
 	return nil, nil
 }
-func (m createUserServiceMock) ListUsersFiltered(context.Context, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+func (m createUserServiceMock) ListUsersFiltered(context.Context, string, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
 	return nil, 0, nil
 }
 func (m createUserServiceMock) GetUserByEmail(context.Context, string) (*domain.User, error) {

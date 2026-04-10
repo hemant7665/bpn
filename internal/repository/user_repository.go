@@ -15,11 +15,11 @@ type UserRepository interface {
 	UpdateUser(ctx context.Context, user *domain.User) error
 	DeleteUser(ctx context.Context, id int) error
 
-	GetUser(ctx context.Context, id int) (*domain.UserSummary, error)
+	GetUser(ctx context.Context, tenantID string, id int) (*domain.UserSummary, error)
 	GetUserByEmail(ctx context.Context, tenantID, email string) (*domain.User, error)
 
-	ListUsersFiltered(ctx context.Context, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, error)
-	CountUsersFiltered(ctx context.Context, filter domain.ListUsersFilter) (int64, error)
+	ListUsersFiltered(ctx context.Context, tenantID string, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, error)
+	CountUsersFiltered(ctx context.Context, tenantID string, filter domain.ListUsersFilter) (int64, error)
 
 	// RefreshUsersSummaryView refreshes read_model.users_summary (CONCURRENTLY when possible).
 	RefreshUsersSummaryView(ctx context.Context) error
@@ -55,9 +55,10 @@ func (r *userRepositoryImpl) DeleteUser(ctx context.Context, id int) error {
 	return r.db.WithContext(ctx).Delete(&domain.User{}, id).Error
 }
 
-func (r *userRepositoryImpl) GetUser(ctx context.Context, id int) (*domain.UserSummary, error) {
+func (r *userRepositoryImpl) GetUser(ctx context.Context, tenantID string, id int) (*domain.UserSummary, error) {
+	tid := domain.NormalizeTenantID(tenantID)
 	var summary domain.UserSummary
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&summary).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, tid).First(&summary).Error; err != nil {
 		return nil, err
 	}
 	return &summary, nil
@@ -78,6 +79,12 @@ func (r *userRepositoryImpl) GetUserByEmail(ctx context.Context, tenantID, email
 	return &user, nil
 }
 
+func (r *userRepositoryImpl) usersSummaryQuery(ctx context.Context, tenantID string, filter domain.ListUsersFilter) *gorm.DB {
+	tid := domain.NormalizeTenantID(tenantID)
+	q := r.db.WithContext(ctx).Model(&domain.UserSummary{}).Where("tenant_id = ?", tid)
+	return r.applyListFilters(q, filter)
+}
+
 func (r *userRepositoryImpl) applyListFilters(db *gorm.DB, filter domain.ListUsersFilter) *gorm.DB {
 	if filter.Username != nil && strings.TrimSpace(*filter.Username) != "" {
 		pat := "%" + strings.ToLower(strings.TrimSpace(*filter.Username)) + "%"
@@ -90,20 +97,18 @@ func (r *userRepositoryImpl) applyListFilters(db *gorm.DB, filter domain.ListUse
 	return db
 }
 
-func (r *userRepositoryImpl) ListUsersFiltered(ctx context.Context, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, error) {
+func (r *userRepositoryImpl) ListUsersFiltered(ctx context.Context, tenantID string, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, error) {
 	var summaries []domain.UserSummary
-	q := r.db.WithContext(ctx).Model(&domain.UserSummary{})
-	q = r.applyListFilters(q, filter)
+	q := r.usersSummaryQuery(ctx, tenantID, filter)
 	if err := q.Order("id ASC").Offset(skip).Limit(limit).Find(&summaries).Error; err != nil {
 		return nil, err
 	}
 	return summaries, nil
 }
 
-func (r *userRepositoryImpl) CountUsersFiltered(ctx context.Context, filter domain.ListUsersFilter) (int64, error) {
+func (r *userRepositoryImpl) CountUsersFiltered(ctx context.Context, tenantID string, filter domain.ListUsersFilter) (int64, error) {
 	var n int64
-	q := r.db.WithContext(ctx).Model(&domain.UserSummary{})
-	q = r.applyListFilters(q, filter)
+	q := r.usersSummaryQuery(ctx, tenantID, filter)
 	if err := q.Count(&n).Error; err != nil {
 		return 0, err
 	}

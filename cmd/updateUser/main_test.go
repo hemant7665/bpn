@@ -8,6 +8,9 @@ import (
 	"project-serverless/internal/auth"
 	"project-serverless/internal/domain"
 	svcerrors "project-serverless/internal/errors"
+	"project-serverless/internal/helpers"
+
+	"gorm.io/gorm"
 )
 
 type updateUserServiceMock struct {
@@ -29,10 +32,10 @@ func (m updateUserServiceMock) UpdateUser(ctx context.Context, user *domain.User
 	return nil
 }
 func (m updateUserServiceMock) DeleteUser(context.Context, int) error { return nil }
-func (m updateUserServiceMock) GetUser(context.Context, int) (*domain.UserSummary, error) {
+func (m updateUserServiceMock) GetUser(context.Context, string, int) (*domain.UserSummary, error) {
 	return nil, nil
 }
-func (m updateUserServiceMock) ListUsersFiltered(context.Context, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+func (m updateUserServiceMock) ListUsersFiltered(context.Context, string, int, int, domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
 	return nil, 0, nil
 }
 func (m updateUserServiceMock) GetUserByEmail(context.Context, string) (*domain.User, error) {
@@ -54,8 +57,20 @@ func authHeader(t *testing.T) string {
 	return "Bearer " + token
 }
 
+func jwtCallerRepo() *helpers.UserRepository {
+	return &helpers.UserRepository{
+		GetWriteUserByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			if id != 1 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			return &domain.User{ID: 1, TenantID: "default-tenant"}, nil
+		},
+	}
+}
+
 func TestHandleRequest_UpdateUserSuccess(t *testing.T) {
 	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = updateUserServiceMock{
 		getByIDFn: func(_ context.Context, id int) (*domain.User, error) {
 			return &domain.User{
@@ -95,6 +110,7 @@ func TestHandleRequest_UpdateUserSuccess(t *testing.T) {
 }
 
 func TestHandleRequest_UpdateUserUnauthorized(t *testing.T) {
+	deps.userRepo = jwtCallerRepo()
 	deps.userService = updateUserServiceMock{}
 	deps.auditEmitter = noopAud{}
 	deps.domainPublisher = noopDomainPub{}
@@ -107,5 +123,44 @@ func TestHandleRequest_UpdateUserUnauthorized(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected unauthorized error")
+	}
+}
+
+func TestHandleRequest_UpdateUserWrongTenantNotFound(t *testing.T) {
+	deps.userRepo = &helpers.UserRepository{
+		GetWriteUserByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			if id != 1 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			return &domain.User{ID: 1, TenantID: "tenant-a"}, nil
+		},
+	}
+	deps.userService = updateUserServiceMock{
+		getByIDFn: func(_ context.Context, id int) (*domain.User, error) {
+			return &domain.User{
+				ID:           id,
+				TenantID:     "tenant-b",
+				Username:     "other",
+				Email:        "o@b.com",
+				PasswordHash: "hash",
+				CreatedAt:    time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	}
+	deps.auditEmitter = noopAud{}
+	deps.domainPublisher = noopDomainPub{}
+
+	_, err := HandleRequest(context.Background(), UpdateUserRequest{
+		ID:            99,
+		Username:      "Hacker",
+		Email:         "h@a.com",
+		Authorization: authHeader(t),
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	ae, ok := svcerrors.IsAppError(err)
+	if !ok || ae.Code != svcerrors.CodeNotFound {
+		t.Fatalf("expected not found, got %v", err)
 	}
 }

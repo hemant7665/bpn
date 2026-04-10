@@ -23,7 +23,6 @@ type ImportJobService interface {
 type ImportUploadURLResult struct {
 	URL              string
 	JobID            string
-	CsvS3Key         string
 	ExpiresInSeconds int
 }
 

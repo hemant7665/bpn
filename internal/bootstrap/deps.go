@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"os"
 
@@ -67,5 +68,9 @@ func SetupImportJobService() (service.ImportJobService, error) {
 	if err != nil {
 		return nil, err
 	}
-	return service.NewImportJobService(repo), nil
+	awsClients, err := service.NewImportJobAWSFromDefaultConfig(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return service.NewImportJobService(repo, awsClients), nil
 }

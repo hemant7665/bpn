@@ -11,6 +11,7 @@ type Mutation {
 
 enum ImportJobStatus {
   PENDING
+  ACCEPTED
   PROCESSING
   COMPLETED
   FAILED
@@ -36,10 +37,23 @@ type ImportJob {
   updatedAt: String!
 }
 
+# List rows omit S3 object keys; use getImportJob for full detail when needed.
+type ImportJobSummary {
+  id: ID!
+  tenantId: String!
+  requestedBy: Int!
+  status: ImportJobStatus!
+  totalRows: Int
+  passedRows: Int
+  failedRows: Int
+  errorMessage: String
+  createdAt: String!
+  updatedAt: String!
+}
+
 type ImportUploadUrlPayload {
   url: String!
   jobId: ID!
-  csvS3Key: String!
   expiresInSeconds: Int!
 }
 
@@ -49,7 +63,7 @@ type PresignedReportUrl {
 }
 
 type ImportJobListPayload {
-  items: [ImportJob!]!
+  items: [ImportJobSummary!]!
   total: Int!
 }
 

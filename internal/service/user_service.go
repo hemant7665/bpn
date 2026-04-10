@@ -42,16 +42,16 @@ func (s *userServiceImpl) DeleteUser(ctx context.Context, id int) error {
 	return s.repo.DeleteUser(ctx, id)
 }
 
-func (s *userServiceImpl) GetUser(ctx context.Context, id int) (*domain.UserSummary, error) {
-	return s.repo.GetUser(ctx, id)
+func (s *userServiceImpl) GetUser(ctx context.Context, tenantID string, id int) (*domain.UserSummary, error) {
+	return s.repo.GetUser(ctx, tenantID, id)
 }
 
-func (s *userServiceImpl) ListUsersFiltered(ctx context.Context, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
-	items, err := s.repo.ListUsersFiltered(ctx, skip, limit, filter)
+func (s *userServiceImpl) ListUsersFiltered(ctx context.Context, tenantID string, skip, limit int, filter domain.ListUsersFilter) ([]domain.UserSummary, int64, error) {
+	items, err := s.repo.ListUsersFiltered(ctx, tenantID, skip, limit, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	total, err := s.repo.CountUsersFiltered(ctx, filter)
+	total, err := s.repo.CountUsersFiltered(ctx, tenantID, filter)
 	if err != nil {
 		return nil, 0, err
 	}

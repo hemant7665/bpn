@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ type ImportJobRepository interface {
 	GetByIDAndTenant(ctx context.Context, id uuid.UUID, tenantID string) (*domain.ImportJob, error)
 	ListByTenant(ctx context.Context, tenantID string, skip, limit int, status *string, createdAtOrder string) ([]domain.ImportJob, int64, error)
 	ClaimPending(ctx context.Context, id uuid.UUID) (bool, error)
+	MarkAccepted(ctx context.Context, id uuid.UUID) error
 	MarkFailed(ctx context.Context, id uuid.UUID, message string) error
 	MarkCompleted(ctx context.Context, id uuid.UUID, reportS3Key string, total, passed, failed int) error
 }
@@ -95,7 +97,7 @@ func (r *importJobRepositoryImpl) ListByTenant(ctx context.Context, tenantID str
 
 func (r *importJobRepositoryImpl) ClaimPending(ctx context.Context, id uuid.UUID) (bool, error) {
 	res := r.db.WithContext(ctx).Model(&domain.ImportJob{}).
-		Where("id = ? AND status = ?", id, domain.ImportStatusPending).
+		Where("id = ? AND status IN ?", id, []string{domain.ImportStatusPending, domain.ImportStatusAccepted}).
 		Updates(map[string]interface{}{
 			"status":     domain.ImportStatusProcessing,
 			"updated_at": time.Now().UTC(),
@@ -110,6 +112,20 @@ func (r *importJobRepositoryImpl) ClaimPending(ctx context.Context, id uuid.UUID
 		return false, err
 	}
 	return true, nil
+}
+
+func (r *importJobRepositoryImpl) MarkAccepted(ctx context.Context, id uuid.UUID) error {
+	res := r.db.WithContext(ctx).Model(&domain.ImportJob{}).Where("id = ? AND status = ?", id, domain.ImportStatusPending).Updates(map[string]interface{}{
+		"status":     domain.ImportStatusAccepted,
+		"updated_at": time.Now().UTC(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return fmt.Errorf("mark accepted: expected 1 row updated, got %d", res.RowsAffected)
+	}
+	return r.refreshImportJobsSummary(ctx)
 }
 
 func (r *importJobRepositoryImpl) MarkFailed(ctx context.Context, id uuid.UUID, message string) error {
